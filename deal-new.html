@@ -191,7 +191,8 @@ function buildSelects() {
   document.getElementById('intakeDate').value = new Date().toISOString().split('T')[0];
 
   // 현재 사용자 기본 선택
-  document.getElementById('assignedTo').value = CURRENT_USER;
+  const currentUser = getCurrentUser();
+  document.getElementById('assignedTo').value = currentUser ? currentUser.username : CURRENT_USER;
 }
 
 function buildStageSelector() {
@@ -256,7 +257,8 @@ document.getElementById('dealForm').addEventListener('submit', async (e) => {
     // 초기 메모가 있으면 저장
     const noteText = document.getElementById('initNote').value.trim();
     if (noteText) {
-      await createNote(created.id, noteText, CURRENT_USER);
+      const user = getCurrentUser();
+      await createNote(created.id, noteText, user.username);
     }
 
     showToast('딜이 성공적으로 등록되었습니다!', 'success');

@@ -75,7 +75,8 @@ async function addNote() {
   const text = ta.value.trim();
   if (!text) { showToast('메모 내용을 입력하세요.', 'warning'); return; }
   try {
-    await createNote(dealId, text, CURRENT_USER);
+    const user = getCurrentUser();
+    await createNote(dealId, text, user.username);
     ta.value = '';
     showToast('메모가 저장되었습니다.', 'success');
     await renderNotes();

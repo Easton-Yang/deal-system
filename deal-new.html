@@ -192,7 +192,7 @@ function buildSelects() {
 
   // 현재 사용자 기본 선택
   const currentUser = getCurrentUser();
-  document.getElementById('assignedTo').value = currentUser ? currentUser.username : CURRENT_USER;
+  document.getElementById('assignedTo').value = currentUser ? currentUser.username : UNASSIGNED;
 }
 
 function buildStageSelector() {

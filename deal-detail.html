@@ -395,7 +395,7 @@ function render() {
               <textarea id="newNoteText" class="form-control" rows="3"
                 placeholder="검토 의견, 회의 결과, 특이사항 등을 기록하세요..."></textarea>
               <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="text-muted" style="font-size:12px">작성자: <strong>${CURRENT_USER}</strong></span>
+                <span class="text-muted" style="font-size:12px">작성자: <strong>${escapeHtml(currentUserName())}</strong></span>
                 <button class="btn btn-primary btn-sm" onclick="addNote()">
                   <i class="fas fa-plus me-1"></i>메모 추가
                 </button>

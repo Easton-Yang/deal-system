@@ -23,173 +23,55 @@
       max-width: 420px;
       padding: 40px;
     }
-    .login-header {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-    .login-header i {
-      font-size: 48px;
-      color: #667eea;
-      margin-bottom: 10px;
-    }
-    .login-header h1 {
-      font-size: 28px;
-      font-weight: 700;
-      margin: 10px 0 5px;
-      color: #333;
-    }
-    .login-header p {
-      color: #999;
-      font-size: 14px;
-    }
-    .form-control {
-      border-radius: 8px;
-      border: 1px solid #ddd;
-      padding: 12px 15px;
-      font-size: 14px;
-    }
-    .form-control:focus {
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
+    .login-header { text-align: center; margin-bottom: 30px; }
+    .login-header i { font-size: 48px; color: #667eea; margin-bottom: 10px; }
+    .login-header h1 { font-size: 28px; font-weight: 700; margin: 10px 0 5px; color: #333; }
+    .login-header p { color: #999; font-size: 14px; }
+    .form-control { border-radius: 8px; border: 1px solid #ddd; padding: 12px 15px; font-size: 14px; }
+    .form-control:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
     .btn-login {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: none;
-      border-radius: 8px;
-      padding: 12px;
-      font-weight: 600;
-      width: 100%;
+      border: none; border-radius: 8px; padding: 12px; font-weight: 600; width: 100%;
     }
-    .btn-login:hover {
-      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-      color: white;
-    }
-    .alert {
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-    }
-    .tab-content {
-      display: none;
-    }
-    .tab-content.active {
-      display: block;
-    }
-    .nav-tabs {
-      border: none;
-      margin-bottom: 20px;
-    }
-    .nav-tabs .nav-link {
-      color: #999;
-      border: none;
-      border-bottom: 2px solid transparent;
-      padding: 10px 0;
-      font-weight: 600;
-    }
-    .nav-tabs .nav-link.active {
-      color: #667eea;
-      border-color: #667eea;
-    }
-    .user-list {
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    .user-item {
-      padding: 12px;
-      border-bottom: 1px solid #eee;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .user-item:last-child {
-      border-bottom: none;
-    }
-    .user-info {
-      flex: 1;
-    }
-    .user-info strong {
-      display: block;
-      color: #333;
-    }
-    .user-info small {
-      color: #999;
-    }
-    .btn-sm {
-      padding: 4px 8px;
-      font-size: 12px;
-    }
+    .btn-login:hover { background: linear-gradient(135deg, #764ba2 0%, #667eea 100%); color: white; }
+    .btn-login:disabled { opacity: .65; }
+    .alert { border-radius: 8px; border: none; font-size: 14px; }
+    .login-foot { margin-top: 22px; font-size: 12px; color: #aaa; text-align: center; line-height: 1.7; }
+    .login-foot a { color: #667eea; text-decoration: none; }
+    .input-group-text { background: #f6f7fb; border: 1px solid #ddd; border-left: none; border-radius: 0 8px 8px 0; font-size: 13px; color: #888; }
   </style>
 </head>
 <body>
   <div class="login-container">
-    <!-- 로그인/관리 탭 -->
-    <ul class="nav nav-tabs" role="tablist">
-      <li class="nav-item">
-        <a class="nav-link active" href="#login-tab" data-tab="login-tab" role="tab">로그인</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" href="#admin-tab" data-tab="admin-tab" role="tab">관리</a>
-      </li>
-    </ul>
-
-    <!-- 로그인 탭 -->
-    <div id="login-tab" class="tab-content active">
-      <div class="login-header">
-        <i class="fas fa-briefcase"></i>
-        <h1>딜 관리 시스템</h1>
-        <p>로그인 후 계속하세요</p>
-      </div>
-
-      <div id="login-error" class="alert alert-danger d-none" role="alert"></div>
-
-      <form id="login-form" onsubmit="handleLogin(event)">
-        <div class="mb-3">
-          <label for="username" class="form-label">사용자명</label>
-          <input type="text" class="form-control" id="username" required autofocus>
-        </div>
-        <div class="mb-3">
-          <label for="password" class="form-label">비밀번호</label>
-          <input type="password" class="form-control" id="password" required>
-        </div>
-        <button type="submit" class="btn btn-login text-white">로그인</button>
-      </form>
+    <div class="login-header">
+      <i class="fas fa-briefcase"></i>
+      <h1>딜 관리 시스템</h1>
+      <p>회사 계정으로 로그인하세요</p>
     </div>
 
-    <!-- 관리 탭 -->
-    <div id="admin-tab" class="tab-content">
-      <!-- 관리자 비밀번호 입력 -->
-      <div id="admin-login-section">
-        <h5 class="mb-3">관리자 전용</h5>
-        <p class="text-muted mb-3">관리자 비밀번호를 입력하세요</p>
-        <div id="admin-login-error" class="alert alert-danger d-none" role="alert"></div>
-        <div class="mb-3">
-          <input type="password" class="form-control" id="admin-password" placeholder="관리자 비밀번호" autofocus>
+    <div id="login-error" class="alert alert-danger d-none" role="alert"></div>
+    <div id="login-notice" class="alert alert-warning d-none" role="alert"></div>
+
+    <form id="login-form">
+      <div class="mb-3">
+        <label for="loginId" class="form-label">아이디</label>
+        <div class="input-group">
+          <input type="text" class="form-control" id="loginId" autocomplete="username"
+                 inputmode="email" required autofocus>
+          <span class="input-group-text d-none" id="domainHint"></span>
         </div>
-        <button type="button" class="btn btn-primary w-100" onclick="checkAdminPassword()">확인</button>
       </div>
-
-      <!-- 관리자 패널 (비밀번호 확인 후 표시) -->
-      <div id="admin-panel-section" class="d-none">
-        <div id="migration-status"></div>
-
-        <h5 class="mb-3">데이터 마이그레이션</h5>
-        <p class="text-muted mb-3" style="font-size:13px">기존 데이터(247건)를 Supabase로 업로드합니다</p>
-        <button type="button" class="btn btn-success w-100 mb-3" onclick="manualMigrateDataToSupabase()">
-          <i class="fas fa-upload me-2"></i>데이터 업로드 시작
-        </button>
-
-        <hr class="my-3">
-
-        <h5 class="mb-3">사용자 비밀번호 관리</h5>
-        <div id="admin-error" class="alert alert-danger d-none" role="alert"></div>
-        <div id="admin-success" class="alert alert-success d-none" role="alert"></div>
-
-        <div class="user-list" id="user-list">
-          <p class="text-muted text-center py-3">사용자 목록 로딩 중...</p>
-        </div>
-
-        <button type="button" class="btn btn-outline-secondary mt-3 w-100" onclick="logoutAdmin()">로그아웃</button>
+      <div class="mb-3">
+        <label for="loginPassword" class="form-label">비밀번호</label>
+        <input type="password" class="form-control" id="loginPassword"
+               autocomplete="current-password" required>
       </div>
+      <button type="submit" class="btn btn-login text-white" id="loginBtn">로그인</button>
+    </form>
+
+    <div class="login-foot">
+      비밀번호를 잊으셨거나 계정이 없으면 자산운용팀 관리자에게 문의하세요.<br>
+      데이터 관리는 <a href="admin.html">관리 페이지</a>에서 (로그인 필요)
     </div>
   </div>
 
@@ -200,211 +82,98 @@
   <script src="js/common.js"></script>
 
   <script>
-    // 탭 전환
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const tabId = this.getAttribute('data-tab');
+    // ================================================================
+    // 로그인 화면
+    // 비밀번호 확인은 Supabase Auth(서버)가 합니다. 이 파일은 비밀번호를
+    // 저장하지도, 비교하지도, 다른 사람 것을 바꾸지도 않습니다.
+    // ================================================================
+    const errorDiv  = document.getElementById('login-error');
+    const noticeDiv = document.getElementById('login-notice');
+    const loginBtn  = document.getElementById('loginBtn');
 
-        // 모든 탭 비활성화
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-
-        // 선택된 탭 활성화
-        this.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
-
-        if (tabId === 'admin-tab') {
-          resetAdminTab();
-        }
-      });
-    });
-
-    // 로그인 처리
-    async function handleLogin(event) {
-      event.preventDefault();
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-      const errorDiv = document.getElementById('login-error');
-
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.classList.remove('d-none');
+    }
+    function clearError() {
       errorDiv.classList.add('d-none');
+    }
+    function showNotice(msg) {
+      noticeDiv.innerHTML = msg;
+      noticeDiv.classList.remove('d-none');
+    }
 
+    // 설정 점검 + 도메인 안내
+    (function initLoginForm() {
       if (DEMO_MODE) {
-        // 데모 모드: 임의로 로그인 허용
-        const user = { username: username, full_name: username, role: 'user' };
-        localStorage.setItem('current_user', JSON.stringify(user));
-        window.location.href = 'index.html';
+        showNotice('<strong>데모 모드</strong>입니다. 아무 값이나 넣어도 들어갈 수 있고, ' +
+                   '데이터는 이 브라우저에만 저장됩니다.');
         return;
       }
-
       if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) {
-        errorDiv.textContent = 'Supabase가 설정되지 않았습니다';
-        errorDiv.classList.remove('d-none');
+        showNotice('Supabase 주소가 설정되지 않았습니다. <code>js/config.js</code> 를 확인하세요.');
+        loginBtn.disabled = true;
         return;
       }
-
-      try {
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('username', username)
-          .single();
-
-        if (error || !data) {
-          errorDiv.textContent = '사용자를 찾을 수 없습니다';
-          errorDiv.classList.remove('d-none');
-          return;
-        }
-
-        // 임시: 간단한 비밀번호 확인 (추후 bcrypt 필요)
-        if (data.password_hash && data.password_hash !== password && data.password_hash !== '') {
-          errorDiv.textContent = '비밀번호가 맞지 않습니다';
-          errorDiv.classList.remove('d-none');
-          return;
-        }
-
-        const user = { id: data.id, username: data.username, full_name: data.full_name, role: data.role };
-        localStorage.setItem('current_user', JSON.stringify(user));
-        window.location.href = 'index.html';
-      } catch (err) {
-        errorDiv.textContent = '로그인 중 오류: ' + err.message;
-        errorDiv.classList.remove('d-none');
-      }
-    }
-
-    // 사용자 목록 로드
-    async function loadUsers() {
-      const listDiv = document.getElementById('user-list');
-      const errorDiv = document.getElementById('admin-error');
-
-      if (DEMO_MODE) {
-        listDiv.innerHTML = '<p class="text-muted text-center py-3">데모 모드에서는 사용자 관리가 지원되지 않습니다</p>';
-        return;
-      }
-
-      if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) {
-        listDiv.innerHTML = '<p class="text-muted text-center py-3">Supabase가 설정되지 않았습니다</p>';
-        return;
-      }
-
-      try {
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const { data, error } = await supabase.from('users').select('*');
-
-        if (error) throw error;
-
-        if (!data || data.length === 0) {
-          listDiv.innerHTML = '<p class="text-muted text-center py-3">사용자가 없습니다</p>';
-          return;
-        }
-
-        listDiv.innerHTML = data.map(user => `
-          <div class="user-item">
-            <div class="user-info">
-              <strong>${user.full_name || user.username}</strong>
-              <small>${user.username}</small>
-            </div>
-            <button type="button" class="btn btn-sm btn-primary" onclick="showPasswordModal(${user.id}, '${user.username}')">
-              비밀번호 변경
-            </button>
-          </div>
-        `).join('');
-      } catch (err) {
-        errorDiv.textContent = '사용자 목록 로드 실패: ' + err.message;
-        errorDiv.classList.remove('d-none');
-      }
-    }
-
-    // 비밀번호 변경 (모달에서 구현)
-    function showPasswordModal(userId, username) {
-      const newPassword = prompt(`${username}의 새 비밀번호를 입력하세요:`, '');
-      if (!newPassword) return;
-
-      updatePassword(userId, newPassword);
-    }
-
-    async function updatePassword(userId, newPassword) {
-      const errorDiv = document.getElementById('admin-error');
-      const successDiv = document.getElementById('admin-success');
-
-      errorDiv.classList.add('d-none');
-      successDiv.classList.add('d-none');
-
-      try {
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const { error } = await supabase
-          .from('users')
-          .update({ password_hash: newPassword })
-          .eq('id', userId);
-
-        if (error) throw error;
-
-        successDiv.textContent = '비밀번호가 변경되었습니다';
-        successDiv.classList.remove('d-none');
-        loadUsers();
-      } catch (err) {
-        errorDiv.textContent = '비밀번호 변경 실패: ' + err.message;
-        errorDiv.classList.remove('d-none');
-      }
-    }
-
-    // ── 관리자 탭 보호 ────────────────────────────────────────────────
-    // 관리자 탭이 초기화될 때
-    function resetAdminTab() {
-      const loginSection = document.getElementById('admin-login-section');
-      const panelSection = document.getElementById('admin-panel-section');
-      const passwordInput = document.getElementById('admin-password');
-      const errorDiv = document.getElementById('admin-login-error');
-
-      // 관리자 비밀번호 입력 상태로 초기화
-      loginSection.classList.remove('d-none');
-      panelSection.classList.add('d-none');
-      errorDiv.classList.add('d-none');
-      passwordInput.value = '';
-      passwordInput.focus();
-    }
-
-    // 관리자 비밀번호 확인
-    function checkAdminPassword() {
-      const passwordInput = document.getElementById('admin-password');
-      const password = passwordInput.value;
-      const errorDiv = document.getElementById('admin-login-error');
-
-      if (!password) {
-        errorDiv.textContent = '비밀번호를 입력하세요';
-        errorDiv.classList.remove('d-none');
-        return;
-      }
-
-      if (password === ADMIN_PASSWORD) {
-        // 비밀번호 맞음
-        document.getElementById('admin-login-section').classList.add('d-none');
-        document.getElementById('admin-panel-section').classList.remove('d-none');
-        loadUsers();
+      if (LOGIN_EMAIL_DOMAIN) {
+        const hint = document.getElementById('domainHint');
+        hint.textContent = '@' + LOGIN_EMAIL_DOMAIN;
+        hint.classList.remove('d-none');
+        document.getElementById('loginId').placeholder = 'dongmin.yang';
       } else {
-        // 비밀번호 틀림
-        errorDiv.textContent = '관리자 비밀번호가 맞지 않습니다';
-        errorDiv.classList.remove('d-none');
-        passwordInput.value = '';
+        document.getElementById('loginId').placeholder = '회사 메일 주소 전체';
       }
-    }
+    })();
 
-    // 관리자 로그아웃
-    function logoutAdmin() {
-      resetAdminTab();
-    }
+    // 이미 로그인한 상태로 이 페이지에 오면 바로 대시보드로 보냅니다.
+    (async function redirectIfLoggedIn() {
+      if (DEMO_MODE) return;
 
-    // Enter 키 입력 시 비밀번호 확인
-    document.addEventListener('DOMContentLoaded', function() {
-      const adminPasswordInput = document.getElementById('admin-password');
-      if (adminPasswordInput) {
-        adminPasswordInput.addEventListener('keypress', function(e) {
-          if (e.key === 'Enter') {
-            checkAdminPassword();
-          }
-        });
+      // 다른 페이지가 '로그인 안 됨'으로 판단해 여기로 보냈는데,
+      // 여기서는 '로그인 됨'으로 보이는 경우 → 두 판단이 엇갈린 상태입니다.
+      // 그냥 돌려보내면 두 화면을 무한히 왕복하므로, 남은 세션을 정리하고
+      // 다시 로그인하게 합니다.
+      let bouncedBack = false;
+      try { bouncedBack = sessionStorage.getItem('auth_redirect') === '1'; } catch (e) {}
+
+      try {
+        const session = await getSession();
+        if (!session) return;
+
+        if (bouncedBack) {
+          try { sessionStorage.removeItem('auth_redirect'); } catch (e) {}
+          try { await getSB().auth.signOut(); } catch (e) {}
+          showNotice('로그인 상태를 확인할 수 없어 정리했습니다. 다시 로그인해 주세요.');
+          return;
+        }
+        window.location.replace('index.html');
+      } catch (e) { /* 세션 확인 실패 시 그냥 로그인 화면을 보여줍니다 */ }
+    })();
+
+    document.getElementById('login-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      clearError();
+
+      const id = document.getElementById('loginId').value;
+      const pw = document.getElementById('loginPassword').value;
+
+      loginBtn.disabled = true;
+      const originalLabel = loginBtn.textContent;
+      loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>확인 중...';
+
+      const result = await performLogin(id, pw);
+
+      if (result.success) {
+        window.location.replace('index.html');
+        return;
       }
+
+      // 실패하면 비밀번호 칸만 비웁니다 (아이디는 다시 치지 않게).
+      document.getElementById('loginPassword').value = '';
+      loginBtn.disabled = false;
+      loginBtn.textContent = originalLabel;
+      showError(result.error);
+      document.getElementById('loginPassword').focus();
     });
   </script>
 </body>

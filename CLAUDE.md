@@ -17,15 +17,18 @@
 
 | 파일 | 역할 |
 |---|---|
+| `login.html` | 로그인 (Supabase Auth, 이메일+비밀번호) |
+| `admin.html` | 관리 (데이터 업로드, 내 비밀번호 재설정) · 로그인 필수 |
 | `index.html` | 대시보드 (통계 카드, Chart.js 도넛·막대, 최근 딜) |
 | `deals.html` | 딜 목록: 목록 뷰 + 칸반 뷰(드래그로 단계 변경), `?view=kanban` |
 | `deal-new.html` | 새 딜 입력 |
 | `deal-detail.html` | 상세: 편집, 단계 바, 메모, 첨부, 단계 이력 |
 | `portfolio.html` | 진행경과: 딜별 단계 소요일 타임라인 |
-| `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, CURRENT_USER |
+| `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, LOGIN_EMAIL_DOMAIN |
 | `js/common.js` | 상수, 데이터 접근 함수(데모=localStorage / 라이브=Supabase), 유틸, 사이드바 |
 | `js/seed-data.js` | 데모 초기 데이터: 실제 딜 247건 (아래 참고) |
 | `딜관리시스템_DB스키마.sql` | DB 스키마 원본 (패키지의 `02_db/01_schema.sql`과 동일) |
+| `보안설정_SQL.sql` | **보안 잠금 SQL.** users 테이블 삭제 + RLS를 로그인 사용자 전용으로. 사용자가 Supabase SQL Editor에 붙여넣어 1회 실행 |
 | `딜관리시스템_기능요구사항명세서_v1.0.docx` | IT 전달용 명세서 (`tools/windows/gen_frd.ps1`로 생성) |
 | `IT전달패키지_v1.0/` | 내부 VDI 배포용 IT 전달 패키지 (아래 참고) |
 | `딜접수목록관리_전달패키지_v1.0.zip` | 위 패키지를 압축한 파일 (사용자가 이름을 바꿈) |
@@ -33,6 +36,21 @@
 HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를 불러옵니다. 루트의 HTML은 CDN(Bootstrap 5.3.2, Font Awesome 6.5.0, Chart.js 4.4.1, supabase-js 2)을 씁니다.
 
 ## 핵심 결정 사항 (바꿀 때 주의)
+
+- **인증 = Supabase Auth** (2026-10-01 교체). 그 전에는 `users` 테이블에 **평문 비밀번호**가 들어 있었고
+  읽기·쓰기가 모두 열려 있어 누구나 조회·변경할 수 있었습니다. 로그인 표시도 localStorage 값 하나뿐이라
+  개발자도구로 흉내내면 통과됐습니다. 둘 다 제거했습니다.
+  - 로그인: `performLogin()` → `supabase.auth.signInWithPassword()`. 비밀번호는 Auth가 해시로 보관합니다.
+  - 페이지 보호: `common.js` 맨 아래에서 `hasStoredSession()`(동기, 빠른 차단) → `guardPage()`(서버 확인).
+    `login.html`만 예외입니다. `admin.html`도 **보호 대상**입니다(예전 `checkLogin`은 예외로 뒀었음).
+  - **화면 쪽 가드는 편의일 뿐, 실제 자물쇠는 RLS입니다.** `보안설정_SQL.sql`을 실행하지 않으면
+    가드를 우회해 데이터를 그대로 가져갈 수 있습니다.
+  - 무한 왕복 방지: 동기 판단과 서버 판단이 엇갈리면 `sessionStorage.auth_redirect` 표시로 한 번만
+    되돌리고, 남은 세션을 정리해 다시 로그인하게 합니다. 토큰 키 이름은 추측하지 않고 저장소를 훑습니다.
+  - `CURRENT_USER`와 `ADMIN_PASSWORD`는 **삭제**했습니다. 기록에 남는 이름은 `currentUserName()`
+    (로그인한 사람)으로 바뀌었습니다. 되살리지 마세요.
+  - 팀원 계정 추가·초기화는 Supabase 대시보드 → Authentication → Users에서만 합니다. 앱에는
+    남의 비밀번호를 바꾸는 기능이 없습니다(있으면 안 됩니다).
 
 - **데모 모드**: `DEMO_MODE = true`. 데이터는 브라우저 localStorage에 저장되고, 키는 `deals_v3`, `notes_v3`, `stage_history_v3`, `files_v3`입니다. **초기 데이터(seed)를 바꾸면 키 버전을 올려야** 기존 브라우저에도 새 데이터가 들어갑니다.
 - **실제 딜 데이터**: 회사 엑셀 `포트폴리오현황보고_딜 접수목록 List 26.2Q.xlsx`(분기별 시트)의 2026.1Q(147건)와 2026.2Q(100건)를 옮겼습니다. 대외비 자료입니다.
@@ -65,8 +83,23 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 
 ## 남은 일 / 사용자에게 확인할 것
 
+**보안 (2026-10-01 교체분 마무리 — 이게 최우선)**
+
+0. **유출된 비밀번호 폐기**: 기존 비밀번호(`1234` 3명, 양동민님 개인 비밀번호 1건)는 이미 공개됐습니다.
+   같은 비밀번호를 메일·은행·회사 계정에 쓰고 있었다면 **그쪽을 먼저** 바꿔야 합니다.
+1. **`js/config.js`의 `LOGIN_EMAIL_DOMAIN` 설정**: 회사 메일 도메인을 아직 받지 못했습니다.
+   빈 문자열이면 로그인 화면에서 메일 주소를 전부 입력해야 합니다.
+2. **Supabase Authentication > Users에서 팀원 4명 계정 생성** (Auto Confirm User 켜기).
+3. **`보안설정_SQL.sql` 실행** — 계정 생성 **후에** 실행합니다(먼저 실행하면 아무도 못 봅니다).
+4. **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 외부인 자가 가입 차단.
+5. **GitHub 저장소 비공개 전환** 및 로그인 실제 동작 테스트.
+6. IT 전달 패키지(`IT전달패키지_v1.0/`) 재생성: 이번 인증 변경이 아직 반영되지 않았습니다.
+   `01_src/`의 HTML·JS와 `02_db/`의 RLS 부분을 함께 갱신해야 합니다.
+
+**기능**
+
 1. 247건 담당자 지정: 한 건씩 편집하거나, 규칙(예: 자산군별 담당자)을 받아 일괄 지정합니다.
-2. 네 명 중 팀장이 누구인지 확인하고, 명세서 2.1 표와 `CURRENT_USER` 기본값에 반영합니다.
+2. 네 명 중 팀장이 누구인지 확인하고 명세서 2.1 표에 반영합니다. (`CURRENT_USER`는 삭제됐으므로 코드 반영은 불필요)
 3. 단계 이름을 회사 용어(제안접수, 초기검토, 상세검토, 투심위상정, 투자집행)로 바꿀지 결정합니다.
 4. 이후 분기(2026.3Q 등) 엑셀 추가 이관.
 5. IT팀 회신에 따른 후속 작업 (백엔드 방식, 서버, 인증 등).

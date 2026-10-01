@@ -209,9 +209,9 @@
   } else {
     tbody.innerHTML = recent.map(d => `
       <tr onclick="location.href='deal-detail.html?id=${d.id}'">
-        <td><strong>${d.deal_name}</strong></td>
+        <td><strong>${escapeHtml(d.deal_name)}</strong></td>
         <td>${assetBadge(d.asset_class)}</td>
-        <td>${d.assigned_to}</td>
+        <td>${escapeHtml(d.assigned_to)}</td>
         <td>${formatCurrency(d.deal_size)}</td>
         <td>${stageBadge(d.current_stage)}</td>
         <td>${formatDate(d.intake_date)}</td>

@@ -247,7 +247,14 @@ async function uploadFile(dealId, file) {
     demoSet('files_v3', files);
     return entry;
   }
-  const path = `${dealId}/${Date.now()}_${file.name}`;
+  // Storage 키(저장 경로)에는 원본 파일명을 쓰지 않습니다. 이유 두 가지:
+  //  1) 한글·공백·특수문자가 든 파일명은 Storage 키로 거부되어 업로드가 실패했습니다.
+  //  2) 파일명이 경로에 그대로 들어가면, 그 경로를 화면에 넣을 때
+  //     따옴표 같은 문자가 섞여 들어갈 수 있습니다.
+  // 화면에 보이는 이름은 file_name 칸에 원본 그대로 저장하므로 표시는 달라지지 않습니다.
+  const ext  = (file.name.match(/\.([A-Za-z0-9]{1,10})$/) || ['', ''])[1].toLowerCase();
+  const rand = Math.random().toString(36).slice(2, 8);
+  const path = `${dealId}/${Date.now()}_${rand}${ext ? '.' + ext : ''}`;
   const { error: uploadErr } = await getSB().storage.from('deal-files').upload(path, file);
   if (uploadErr) throw uploadErr;
   const { data, error } = await getSB().from('deal_files').insert({

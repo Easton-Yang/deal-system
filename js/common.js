@@ -63,10 +63,18 @@ function demoId() {
 }
 
 // ── Supabase 클라이언트 ─────────────────────────────────────────
+// Supabase 클라이언트는 페이지당 하나만 만듭니다.
+// (여러 개 만들면 로그인 세션이 서로 덮어써서 로그인이 풀릴 수 있습니다.)
 let _sb = null;
 function getSB() {
   if (!_sb && !DEMO_MODE) {
-    _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,      // 새로고침해도 로그인 유지
+        autoRefreshToken: true,    // 토큰 만료 전 자동 갱신
+        detectSessionInUrl: false
+      }
+    });
   }
   return _sb;
 }
@@ -114,12 +122,12 @@ async function createDeal(data) {
     const newDeal = { ...data, id: demoId(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     deals.unshift(newDeal);
     demoSet('deals_v3', deals);
-    await addStageHistory(newDeal.id, newDeal.current_stage || '접수', CURRENT_USER);
+    await addStageHistory(newDeal.id, newDeal.current_stage || '접수', currentUserName());
     return newDeal;
   }
   const { data: created, error } = await getSB().from('deals').insert(data).select().single();
   if (error) throw error;
-  await addStageHistory(created.id, created.current_stage, CURRENT_USER);
+  await addStageHistory(created.id, created.current_stage, currentUserName());
   return created;
 }
 
@@ -153,7 +161,7 @@ async function changeStage(dealId, newStage) {
   const prevDeal = await getDeal(dealId);
   if (!prevDeal) throw new Error('Deal not found');
   await updateDeal(dealId, { current_stage: newStage });
-  await addStageHistory(dealId, newStage, CURRENT_USER);
+  await addStageHistory(dealId, newStage, currentUserName());
 }
 
 // ── 단계 이력 ──────────────────────────────────────────────────
@@ -232,7 +240,7 @@ async function uploadFile(dealId, file) {
     const files = demoGet('files_v3');
     const entry = {
       id: demoId(), deal_id: dealId, file_name: file.name,
-      file_size: file.size, uploaded_by: CURRENT_USER,
+      file_size: file.size, uploaded_by: currentUserName(),
       uploaded_at: new Date().toISOString(), file_path: null
     };
     files.push(entry);
@@ -244,7 +252,7 @@ async function uploadFile(dealId, file) {
   if (uploadErr) throw uploadErr;
   const { data, error } = await getSB().from('deal_files').insert({
     deal_id: dealId, file_name: file.name, file_path: path,
-    file_size: file.size, uploaded_by: CURRENT_USER
+    file_size: file.size, uploaded_by: currentUserName()
   }).select().single();
   if (error) throw error;
   return data;
@@ -351,93 +359,182 @@ function renderNav(activePage) {
     <ul class="nav flex-column mt-3">${items}</ul>
     <div class="sidebar-footer">
       <i class="fas fa-user-circle me-2"></i>
-      <span>${CURRENT_USER}</span>
+      <span>&nbsp;</span>
     </div>`;
+
+  // 로그인한 사람 이름과 로그아웃 버튼을 채웁니다.
+  updateCurrentUserInSidebar();
 }
 
-// ── 로그인 관리 ────────────────────────────────────────────────────
-// Supabase 클라이언트 초기화
-const supabaseClient = !DEMO_MODE ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+// ── 로그인 관리 (Supabase Auth) ────────────────────────────────────
+// [바뀐 점] 예전에는 users 테이블에서 비밀번호를 직접 비교하고,
+// 로그인 성공 표시를 localStorage 에 남겼습니다. 그 표시만 흉내내면
+// 로그인 없이 들어올 수 있었고, 비밀번호도 암호화 없이 저장돼 있었습니다.
+// 이제는 Supabase Auth 가 비밀번호를 해시로 보관하고, 로그인하면
+// 서버가 서명한 토큰(위조 불가)을 내려줍니다.
 
-// 현재 로그인한 사용자 정보 (localStorage에 저장)
+// HTML 특수문자 escape (사용자 이름 등을 화면에 넣을 때 사용)
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 현재 페이지 파일명
+function currentPageName() {
+  return window.location.pathname.split('/').pop() || 'index.html';
+}
+
+// 로그인 화면에서 아이디만 입력한 경우 회사 메일 도메인을 붙여줍니다.
+function toLoginEmail(input) {
+  const id = String(input || '').trim();
+  if (!id) return '';
+  if (id.includes('@')) return id;
+  if (typeof LOGIN_EMAIL_DOMAIN === 'string' && LOGIN_EMAIL_DOMAIN) {
+    return id + '@' + LOGIN_EMAIL_DOMAIN;
+  }
+  return id;   // 도메인 미설정 → 그대로 보내고 Auth 가 형식 오류를 알려줍니다.
+}
+
+// ── 세션 캐시 ──
+// Supabase 세션 조회는 비동기(await)라서, 화면을 그리는 함수에서 바로 쓰기
+// 어렵습니다. 그래서 로그인 확인이 끝나면 여기에 담아두고 화면에서 꺼내 씁니다.
+let _sessionUser = null;
+
+// 세션에서 표시용 사용자 정보 만들기
+function userFromSession(session) {
+  if (!session || !session.user) return null;
+  const u = session.user;
+  const meta = u.user_metadata || {};
+  const email = u.email || '';
+  return {
+    id: u.id,
+    email: email,
+    // 아이디: 메일 주소의 @ 앞부분 (예: dongmin.yang@... → dongmin.yang)
+    username: meta.username || email.split('@')[0] || '',
+    full_name: meta.full_name || meta.username || email.split('@')[0] || '',
+    role: meta.role || 'user'
+  };
+}
+
+// 현재 로그인한 사용자 (화면 표시용, 로그인 확인 이후에 값이 있습니다)
 function getCurrentUser() {
-  const user = localStorage.getItem('current_user');
-  return user ? JSON.parse(user) : null;
-}
-
-function setCurrentUser(user) {
-  if (user) {
-    localStorage.setItem('current_user', JSON.stringify(user));
-  } else {
-    localStorage.removeItem('current_user');
-  }
-}
-
-// 로그인 수행
-async function performLogin(username, password) {
   if (DEMO_MODE) {
-    // 데모 모드: 임의로 로그인 허용
-    const user = { username: username, full_name: username, role: 'user' };
-    setCurrentUser(user);
-    return { success: true, user };
+    return { id: 'demo', email: '', username: '데모사용자', full_name: '데모사용자', role: 'user' };
   }
+  return _sessionUser;
+}
 
+// 기록(메모 작성자, 단계 변경자, 첨부 업로더)에 남길 이름
+function currentUserName() {
+  const u = getCurrentUser();
+  return (u && (u.username || u.full_name || u.email)) || UNASSIGNED;
+}
+
+// 서버에 저장된 세션 불러오기
+async function getSession() {
+  if (DEMO_MODE) return null;
+  const sb = getSB();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return (data && data.session) || null;
+}
+
+// 로그인 수행 (login.html 에서 호출)
+async function performLogin(idOrEmail, password) {
+  if (DEMO_MODE) {
+    return { success: true, user: getCurrentUser() };
+  }
+  const email = toLoginEmail(idOrEmail);
+  if (!email || !password) {
+    return { success: false, error: '아이디와 비밀번호를 모두 입력하세요' };
+  }
   try {
-    const { data, error } = await supabaseClient
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .single();
-
-    if (error || !data) {
-      return { success: false, error: '사용자를 찾을 수 없습니다' };
+    const { data, error } = await getSB().auth.signInWithPassword({ email, password });
+    if (error) {
+      // Auth 는 '아이디가 없음'과 '비밀번호가 틀림'을 구분해서 알려주지 않습니다.
+      // 없는 아이디를 찾아내는 공격을 막기 위한 설계이므로 그대로 둡니다.
+      const msg = /Invalid login credentials/i.test(error.message)
+        ? '아이디 또는 비밀번호가 맞지 않습니다'
+        : (/Email not confirmed/i.test(error.message)
+            ? '메일 인증이 완료되지 않은 계정입니다. 관리자에게 문의하세요'
+            : '로그인 실패: ' + error.message);
+      return { success: false, error: msg };
     }
-
-    // 간단한 비밀번호 확인 (실제로는 bcrypt 비교 필요, 추후 보강)
-    if (data.password_hash !== password) {
-      return { success: false, error: '비밀번호가 맞지 않습니다' };
-    }
-
-    const user = { id: data.id, username: data.username, full_name: data.full_name, role: data.role };
-    setCurrentUser(user);
-    return { success: true, user };
+    _sessionUser = userFromSession(data.session);
+    try { sessionStorage.removeItem('auth_redirect'); } catch (e) {}
+    return { success: true, user: _sessionUser };
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: '로그인 중 오류: ' + err.message };
   }
 }
 
 // 로그아웃
-function performLogout() {
-  setCurrentUser(null);
+async function performLogout() {
+  _sessionUser = null;
+  try {
+    // 예전 방식이 남겨둔 흔적도 같이 지웁니다.
+    localStorage.removeItem('current_user');
+    sessionStorage.removeItem('migration_done');
+  } catch (e) { /* 저장소 접근 불가 시 무시 */ }
+  if (!DEMO_MODE && getSB()) {
+    try { await getSB().auth.signOut(); } catch (e) { /* 이미 만료된 세션 */ }
+  }
+  window.location.replace('login.html');
 }
 
-// 로그인 확인 (미로그인이면 login.html로 리다이렉트)
-function checkLogin() {
-  const user = getCurrentUser();
-  const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-
-  // login.html과 admin.html은 제외
-  if (currentPage !== 'login.html' && currentPage !== 'admin.html') {
-    if (!user) {
-      window.location.href = 'login.html';
+// 저장된 Auth 토큰이 있는지 빠르게(동기) 확인
+// 화면이 깜빡이지 않도록 먼저 확인하고, 실제 유효성은 아래 guardPage 에서
+// 서버에 물어봅니다. 토큰은 서버가 서명했기 때문에 흉내낼 수 없습니다.
+function hasStoredSession() {
+  try {
+    // Supabase 는 'sb-<프로젝트>-auth-token' 이라는 이름으로 저장합니다.
+    // 이름 규칙이 버전마다 조금씩 달라질 수 있으므로, 정확한 이름을
+    // 추측하지 않고 저장소를 훑어봅니다. (이름을 잘못 맞히면 로그인한
+    // 사람도 로그인 화면으로 되돌려 보내는 문제가 생깁니다.)
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('sb-') === 0 && k.indexOf('auth-token') !== -1) return true;
     }
+    return false;
+  } catch (e) {
+    // 저장소를 못 읽는 상황(시크릿 모드 등)에서는 막지 않고,
+    // 아래 guardPage 가 서버에 직접 물어보게 둡니다.
+    return true;
   }
+}
+
+// 페이지 진입 가드: 로그인하지 않았으면 로그인 화면으로 보냅니다.
+async function guardPage() {
+  if (DEMO_MODE) return true;
+  if (currentPageName() === 'login.html') return true;
+
+  const session = await getSession();
+  if (!session) {
+    _sessionUser = null;
+    // 만료된 토큰이 저장소에 남아 있으면 매번 되돌려지므로 함께 정리합니다.
+    try { await getSB().auth.signOut(); } catch (e) {}
+    window.location.replace('login.html');
+    return false;
+  }
+  _sessionUser = userFromSession(session);
+  try { sessionStorage.removeItem('auth_redirect'); } catch (e) {}
+  document.documentElement.style.visibility = '';
+  updateCurrentUserInSidebar();
+  return true;
 }
 
 // 사이드바에 현재 사용자 표시 업데이트
 function updateCurrentUserInSidebar() {
   const user = getCurrentUser();
-  if (user) {
-    const footer = document.querySelector('.sidebar-footer');
-    if (footer) {
-      footer.innerHTML = `
-        <i class="fas fa-user-circle me-2"></i>
-        <span>${user.full_name || user.username}</span>
-        <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="performLogout(); window.location.href='login.html';">
-          <i class="fas fa-sign-out-alt"></i>
-        </button>`;
-    }
-  }
+  const footer = document.querySelector('.sidebar-footer');
+  if (!footer) return;
+  const label = user ? (user.full_name || user.username || user.email) : '로그인 필요';
+  footer.innerHTML =
+    '<i class="fas fa-user-circle me-2"></i>' +
+    '<span>' + escapeHtml(label) + '</span>' +
+    '<button class="btn btn-sm btn-outline-secondary ms-auto" title="로그아웃" onclick="performLogout()">' +
+    '<i class="fas fa-sign-out-alt"></i></button>';
 }
 
 // Supabase 데이터 마이그레이션 (한 번만 실행)
@@ -446,7 +543,7 @@ async function migrateDataToSupabase() {
   if (sessionStorage.getItem('migration_done')) return;
 
   try {
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = getSB();
 
     // deals 테이블에 데이터가 있는지 확인
     const { count: dealCount } = await supabase
@@ -517,7 +614,7 @@ async function manualMigrateDataToSupabase() {
     const statusDiv = document.getElementById('migration-status');
     if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>데이터를 업로드 중입니다... 잠깐 기다려주세요.</div>';
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = getSB();
 
     // deals 테이블에 데이터가 있는지 확인
     const { count: dealCount } = await supabase
@@ -575,9 +672,27 @@ async function manualMigrateDataToSupabase() {
   }
 }
 
-// 초기화
+// ── 초기화 ────────────────────────────────────────────────────────
 if (DEMO_MODE) initDemoData();
-checkLogin();
+
+// 로그인하지 않은 사람이 주소를 직접 입력해 들어오는 것을 막습니다.
+// (토큰이 아예 없으면 서버에 물어볼 것도 없이 바로 보냅니다.)
+if (!DEMO_MODE && currentPageName() !== 'login.html') {
+  if (!hasStoredSession()) {
+    document.documentElement.style.visibility = 'hidden';
+    // 로그인 화면과 이 페이지를 무한히 왕복하지 않도록 표시를 남깁니다.
+    try { sessionStorage.setItem('auth_redirect', '1'); } catch (e) {}
+    window.location.replace('login.html');
+  } else {
+    // 토큰이 있어도 만료·위조 여부를 Supabase 에 확인합니다.
+    guardPage();
+  }
+}
+
+// ※ 화면 쪽 가드는 '편의'입니다. 실제 자물쇠는 Supabase 의 RLS 입니다.
+//   브라우저 개발자도구로 이 검사를 건너뛰어도, 로그인 토큰이 없으면
+//   데이터베이스가 딜 데이터를 한 건도 내주지 않습니다.
+//   그래서 '보안설정_SQL.sql' 실행이 반드시 필요합니다.
 window.addEventListener('load', () => {
   updateCurrentUserInSidebar();
   migrateDataToSupabase();

@@ -15,6 +15,14 @@ const SUPABASE_URL  = 'http://INTERNAL_API_HOST:8000';
 //     실제 접근 통제는 02_db/01_schema.sql 의 RLS 정책이 담당합니다.
 const SUPABASE_ANON_KEY = 'INTERNAL_ANON_KEY';
 
+// [절대 주의] service_role 키는 이 파일에 넣지 마세요.
+// config.js 는 모든 화면이 브라우저로 불러오는 파일이라, 적어두면
+// 사이트를 여는 누구나 DB 전체 권한을 가져갑니다.
+//   anon          : 공개용. RLS 적용을 받음. 노출돼도 괜찮음
+//   service_role  : DB 전체 권한. RLS를 무시하고 전부 통과. 진짜 비밀
+// 초기 데이터 일괄 적재는 02_db/03_initial_data.sql 을 SQL Editor 에서
+// 실행하는 방식을 쓰세요. 브라우저에 service_role 키가 필요 없습니다.
+
 // ★ 로그인 아이디로 쓸 사내 메일 도메인
 //   예) 'preedlife.com' 으로 적어두면 로그인 화면에서 아이디만 입력해도
 //       '아이디@preedlife.com' 으로 로그인됩니다.

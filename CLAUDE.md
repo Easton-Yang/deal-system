@@ -33,6 +33,7 @@
 | `tools/check_xss.py` | escape 누락 전수 검사 (Python만 필요) |
 | `tools/make_package.py` | IT 전달 패키지 `01_src/` 재생성 + CDN 치환 검사 (맥 공통) |
 | `tools/test_security.js` | 실제 브라우저로 XSS·로그인 차단 32개 항목 검사 (Node + Playwright) |
+| `tools/mac/upload_to_supabase.py` | seed-data.js의 딜 247건·이력을 Supabase로 일괄 업로드 (service_role 키 사용) |
 | `tools/README.md` | 위 스크립트를 언제 어떤 순서로 돌리는지 |
 | `IT전달패키지_v1.0/` | 내부 VDI 배포용 IT 전달 패키지 (아래 참고) |
 | `딜접수목록관리_전달패키지_v1.0.zip` | 위 패키지를 압축한 파일 (사용자가 이름을 바꿈) |
@@ -40,6 +41,34 @@
 HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를 불러옵니다. 루트의 HTML은 CDN(Bootstrap 5.3.2, Font Awesome 6.5.0, Chart.js 4.4.1, supabase-js 2)을 씁니다.
 
 ## 핵심 결정 사항 (바꿀 때 주의)
+
+- **버전 표시**: `common.js` 상단의 `APP_VERSION`이 사이드바 배지에 나옵니다
+  (데모는 노랑 `데모 Beta-2.0`, 라이브는 초록 `Beta-2.0`). 사용자가 정한 규칙입니다.
+  - 작은 수정(버튼 위치, 글자, 버그 하나) → 뒷자리 +1
+  - 큰 변화(화면 추가, 기능 추가, DB 변경) → 앞자리 +1
+  - 변경할 때 `APP_VERSION` 위의 변경 내역 표에 한 줄 추가하세요.
+  - 현재 `Beta-2.0` (2026-10-01 보안 교체: 화면 2개 추가 + DB 변경이라 앞자리 올림).
+
+- **service_role 키 (가장 위험한 자산)**: `.service_role_key` 파일에 있고 `.gitignore` 처리됩니다.
+  저장소 이력에 올라간 적은 **없습니다**(2026-10-01 전체 이력 검색 확인).
+  - anon 키는 공개용이라 `config.js`에 있어도 됩니다. **service_role은 RLS를 무시하고 전부 통과합니다.**
+    `보안설정_SQL.sql`로 잠가도 이 키를 가진 사람은 그대로 들어옵니다.
+  - `.gitignore`는 git만 막습니다. **폴더를 복사하면 키도 복사됩니다.**
+  - 업로드가 끝나면 키 파일을 지우세요. 노출 의심 시에는 Supabase JWT 시크릿 재발급이 필요하고,
+    그때 anon 키도 바뀌므로 `config.js`도 함께 고쳐야 합니다.
+  - 업로드는 `admin.html` 버튼(로그인 사용자, service_role 불필요)을 우선 쓰고,
+    안 될 때만 `tools/mac/upload_to_supabase.py`를 씁니다.
+
+- **⚠️ 실행하면 안 되는 SQL**: `02_RLS정책_SQL에디터에_붙여넣기.sql`
+  (맥북 로컬에만 있던 파일. 저장소에는 올리지 않았고, 사용자에게 삭제를 안내했습니다.)
+  - `FOR ALL TO anon, authenticated USING (true)` 정책을 만들어 **비로그인 전체 개방**합니다.
+    로그인 기능이 없던 시절의 임시 조치입니다.
+  - **PostgreSQL은 허용 정책을 OR로 합칩니다.** 느슨한 정책이 하나라도 남으면 그쪽이 이깁니다.
+  - 그래서 `보안설정_SQL.sql`은 이름을 추측하지 않고 **네 테이블의 정책을 전부 찾아 지운 뒤**
+    새로 만듭니다(`pg_policies` + `DO` 블록). Storage도 'deal-files'를 참조하는 정책만 골라 지웁니다.
+    이름 하드코딩 방식으로 되돌리지 마세요. `anon_all_*`가 살아남습니다.
+  - 확인: `SELECT ... FROM pg_policies WHERE 'anon' = ANY (roles)` 가 **0건**이어야 정상.
+    `보안설정_SQL.sql` 하단에 한 번에 판정하는 쿼리가 있습니다.
 
 - **인증 = Supabase Auth** (2026-10-01 교체). 그 전에는 `users` 테이블에 **평문 비밀번호**가 들어 있었고
   읽기·쓰기가 모두 열려 있어 누구나 조회·변경할 수 있었습니다. 로그인 표시도 localStorage 값 하나뿐이라
@@ -122,6 +151,10 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 3. ⬜ **`보안설정_SQL.sql` 실행** (Supabase SQL Editor). **이것을 하지 않으면 이번 작업의 효력이 거의 없습니다.**
    화면 쪽 차단은 우회 가능하고, 실제 자물쇠는 RLS입니다.
    → 새 코드를 맥북에 받은 **뒤에** 실행하세요. 먼저 실행하면 예전 코드로는 로그인이 막힙니다.
+   → 2026-10-01: 맥북에 `anon` 전체 개방 정책을 만드는 SQL 파일이 있었고 실행된 것으로 추정됩니다.
+      `보안설정_SQL.sql`이 기존 정책을 전부 지우도록 수정했으므로 이 실행으로 정리됩니다.
+3-1. ⬜ **`02_RLS정책_SQL에디터에_붙여넣기.sql` 삭제** (맥북). 실행하면 잠금이 풀립니다.
+3-2. ⬜ **`.service_role_key` 삭제** (맥북 + 백업 폴더). 데이터 업로드가 끝났으면 남겨둘 이유가 없습니다.
 4. ⬜ **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 외부인 자가 가입 차단.
 5. ⬜ **GitHub 저장소 비공개 전환** 및 로그인 실제 동작 테스트 (크롬 캐시 때문에 `⌘⇧R` 필요).
 6. ✅ IT 전달 패키지 재생성 — 완료 (`login.html`·`admin.html` 추가, SQL 잠금, 문서 갱신, zip 재압축)
@@ -139,6 +172,11 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 
 ## 환경 주의사항
 
+- **맥북 로컬 상태 (2026-10-01 확인)**: 폴더는 `/Users/dm/Documents/deal-system`.
+  - `.claude/settings.local.json`은 로컬 변경 상태로 두었습니다(저장소 커밋과 무관).
+  - `.service_role_key`(220바이트, 권한 600)가 있습니다. 위 '핵심 결정 사항' 참고.
+  - 백업 폴더 `deal-system-백업-20261001`에도 키 사본이 들어갔습니다. 정리 필요.
+  - 회사 엑셀 원본은 **저장소에 없고 맥북에만** 있습니다. 기존 폴더를 지우면 사라집니다.
 - `tools/windows/`의 스크립트는 **Windows 전용**입니다. Word·Excel COM 자동화와 PowerShell 5.1을 씁니다.
   - `gen_frd.ps1`: 명세서 docx 생성
   - `import_excel.ps1`: 엑셀 → seed/SQL 변환

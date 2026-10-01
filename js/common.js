@@ -2,6 +2,20 @@
 // 공통 모듈 - 모든 페이지에서 공유
 // ================================================================
 
+// ── 버전 ──────────────────────────────────────────────────────
+// 화면 왼쪽 위 '딜 관리 시스템' 아래 배지에 표시됩니다.
+// 시스템을 고칠 때마다 이 숫자를 올립니다.
+//   작은 수정(버튼 위치, 글자, 버그 하나)   → 뒷자리 +1  (Beta-1.2 → Beta-1.3)
+//   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
+// 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
+//
+//   Beta-2.0  2026-10-01  로그인 도입(Supabase Auth), 평문 비밀번호 제거,
+//                         DB를 로그인 사용자 전용으로 잠금(RLS), XSS 이스케이프,
+//                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
+//   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
+//   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
+const APP_VERSION = 'Beta-2.0';
+
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
 // 자산군 = 포트폴리오현황보고 '세부유형' 분류 (대체투자 → 주식 → 채권 순)
@@ -342,9 +356,10 @@ function renderNav(activePage) {
     { id:'new',       label:'새 딜 입력', icon:'fa-plus-circle',    href:'deal-new.html' },
   ];
 
+  // 라이브는 초록, 데모는 노랑 + '데모' 표시. 둘 다 버전을 함께 보여줍니다.
   const modeLabel = DEMO_MODE
-    ? '<span class="badge bg-warning text-dark">데모모드</span>'
-    : '<span class="badge bg-success">라이브</span>';
+    ? '<span class="badge bg-warning text-dark">데모 ' + APP_VERSION + '</span>'
+    : '<span class="badge bg-success">' + APP_VERSION + '</span>';
 
   const items = pages.map(p => `
     <li class="nav-item">

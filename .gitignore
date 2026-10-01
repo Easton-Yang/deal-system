@@ -4,3 +4,12 @@ node_modules/
 .env.local
 *.log
 .vercel
+
+# Supabase service_role 키 (DB 전체 권한). 절대 커밋하지 마세요.
+# anon 키는 공개용이라 config.js 에 있어도 되지만, 이 키는 다릅니다.
+.service_role_key
+*.service_role_key
+
+# 회사 엑셀 원본 (대외비). 딜 데이터는 seed-data.js 로 변환해 씁니다.
+*.xlsx
+*.xls

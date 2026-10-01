@@ -9,6 +9,7 @@
 | `check_xss.py` | 사용자 입력이 escape 없이 화면에 들어가는 곳을 전수 검사 | Python 3 |
 | `make_package.py` | IT 전달 패키지(`IT전달패키지_v1.0/01_src`) 재생성 + CDN 주소 치환 확인 | Python 3 |
 | `test_security.js` | 실제 브라우저로 XSS·로그인 차단 32개 항목 검사 | Node.js + Playwright |
+| `mac/upload_to_supabase.py` | `seed-data.js`의 딜 247건·단계이력을 Supabase로 일괄 업로드 | Python 3 + service_role 키 |
 
 ## 언제 돌리나
 
@@ -32,6 +33,38 @@ npx playwright install chromium
 
 설치가 어려우면 `check_xss.py`만으로도 escape 누락은 잡을 수 있습니다.
 다만 이벤트 위임(삭제 버튼) 동작과 로그인 차단은 브라우저 테스트에서만 확인됩니다.
+
+## 데이터 업로드 — 두 가지 방법
+
+| | `admin.html` 의 '데이터 업로드' 버튼 | `mac/upload_to_supabase.py` |
+|---|---|---|
+| 권한 | 로그인한 사용자 (anon 키 + 세션) | **service_role 키 (DB 전체 권한)** |
+| 쓰는 곳 | 브라우저 | 터미널 |
+| RLS | 적용받음 | 무시하고 통과 |
+| 추천 | **이쪽을 먼저 쓰세요** | 브라우저로 안 될 때만 |
+
+`upload_to_supabase.py`는 `.service_role_key` 파일에서 키를 읽습니다.
+이 키는 **RLS를 무시하고 모든 잠금을 통과**하므로, anon 키와 달리 진짜 비밀입니다.
+
+- `.gitignore`에 들어 있어 저장소에는 올라가지 않습니다.
+- 다만 **폴더를 복사하면 키도 같이 복사됩니다.** git만 막아줄 뿐입니다.
+- **업로드가 끝났으면 키 파일을 지우세요.** 남겨둘 이유가 없습니다.
+  ```bash
+  rm .service_role_key
+  ```
+- 키가 외부에 노출됐을 가능성이 있으면, Supabase에서 JWT 시크릿을 재발급해야
+  합니다. 이때 anon 키도 함께 바뀌므로 `js/config.js`도 같이 수정해야 합니다.
+
+## 실행하면 안 되는 SQL
+
+`02_RLS정책_SQL에디터에_붙여넣기.sql` 이라는 파일이 보이면 **실행하지 말고 지우세요.**
+로그인 기능이 없던 시절의 임시 파일로, `TO anon` 정책을 만들어
+**로그인하지 않은 사람에게 DB 전체를 개방합니다.**
+
+PostgreSQL은 허용 정책을 OR로 합치기 때문에, 이 정책이 하나라도 남아 있으면
+`보안설정_SQL.sql`로 잠가도 느슨한 쪽이 이깁니다.
+(`보안설정_SQL.sql`은 이제 기존 정책을 **이름에 상관없이 전부** 지운 뒤
+새로 만들므로, 먼저 실행된 적이 있어도 정리됩니다.)
 
 ## 주의
 

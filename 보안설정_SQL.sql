@@ -56,18 +56,32 @@ ALTER TABLE public.deal_stage_history  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deal_notes          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deal_files          ENABLE ROW LEVEL SECURITY;
 
--- 예전에 만들어 둔 정책이 남아 있으면 지웁니다
--- (이름이 같은 정책은 두 번 만들 수 없어서, 다시 실행해도 되게 해둡니다)
-DROP POLICY IF EXISTS "authenticated_select_deals"    ON public.deals;
-DROP POLICY IF EXISTS "authenticated_insert_deals"    ON public.deals;
-DROP POLICY IF EXISTS "authenticated_update_deals"    ON public.deals;
-DROP POLICY IF EXISTS "authenticated_delete_deals"    ON public.deals;
-DROP POLICY IF EXISTS "authenticated_select_history"  ON public.deal_stage_history;
-DROP POLICY IF EXISTS "authenticated_insert_history"  ON public.deal_stage_history;
-DROP POLICY IF EXISTS "authenticated_select_notes"    ON public.deal_notes;
-DROP POLICY IF EXISTS "authenticated_insert_notes"    ON public.deal_notes;
-DROP POLICY IF EXISTS "authenticated_select_files"    ON public.deal_files;
-DROP POLICY IF EXISTS "authenticated_insert_files"    ON public.deal_files;
+-- 기존 정책을 '전부' 제거합니다 (이름을 추측하지 않습니다)
+--
+-- [중요] 이 프로젝트에는 로그인 기능이 없던 시절에 만든
+--   anon_all_deals / anon_all_history / anon_all_notes / anon_all_files
+-- 정책이 남아 있을 수 있습니다. 이들은 'TO anon' 으로 되어 있어
+-- 로그인하지 않은 사람에게 전체 접근을 허용합니다.
+--
+-- PostgreSQL 은 허용 정책을 OR 로 합칩니다. 즉 느슨한 정책이 하나라도
+-- 남아 있으면 그쪽이 이깁니다. 아래 새 정책만 추가하고 옛 정책을 남기면
+-- 잠금이 전혀 걸리지 않습니다.
+--
+-- 그래서 이름을 하나하나 적는 대신, 네 테이블에 걸린 정책을
+-- 모두 찾아 지웁니다. 어떤 이름으로 만들어졌든 남지 않습니다.
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT policyname, tablename
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('deals', 'deal_stage_history', 'deal_notes', 'deal_files')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
+    RAISE NOTICE '기존 정책 제거: %.%', r.tablename, r.policyname;
+  END LOOP;
+END $$;
 
 -- 새 정책: 로그인한 사람(authenticated)에게만 허용
 -- deals
@@ -124,9 +138,23 @@ GRANT SELECT, INSERT, DELETE         ON public.deal_files         TO authenticat
 -- 버킷을 비공개로 (이미 비공개면 그대로)
 UPDATE storage.buckets SET public = false WHERE id = 'deal-files';
 
-DROP POLICY IF EXISTS "deal_files_select" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_insert" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_delete" ON storage.objects;
+-- 'deal-files' 버킷에 걸린 기존 정책을 전부 제거합니다.
+-- (다른 버킷의 정책은 건드리지 않도록, 정책 내용에 'deal-files' 가
+--  들어 있는 것만 골라냅니다.)
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects'
+      AND (coalesce(qual, '') LIKE '%deal-files%'
+        OR coalesce(with_check, '') LIKE '%deal-files%')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', r.policyname);
+    RAISE NOTICE '기존 Storage 정책 제거: %', r.policyname;
+  END LOOP;
+END $$;
 
 CREATE POLICY "deal_files_select_auth" ON storage.objects
   FOR SELECT TO authenticated USING (bucket_id = 'deal-files');
@@ -153,10 +181,35 @@ CREATE POLICY "deal_files_delete_auth" ON storage.objects
 --   SELECT count(*) FROM information_schema.tables
 --   WHERE table_schema = 'public' AND table_name = 'users';
 --
--- 정책 목록 확인:
+-- 가장 중요한 확인 — 비로그인(anon) 허용이 남아 있지 않은지:
+-- 결과가 '0건'이어야 정상입니다. 한 건이라도 나오면 아직 열려 있습니다.
+--
+--   SELECT tablename, policyname, roles, cmd
+--   FROM pg_policies
+--   WHERE schemaname IN ('public','storage')
+--     AND 'anon' = ANY (roles)
+--   ORDER BY tablename, policyname;
+--
+-- 전체 정책 목록 (참고):
 --
 --   SELECT tablename, policyname, roles, cmd
 --   FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename, policyname;
+--
+-- 한 번에 판정하기 (아래를 Run 하면 '잠김' 또는 '열려있음'이 나옵니다):
+--
+--   SELECT CASE
+--     WHEN EXISTS (
+--       SELECT 1 FROM pg_policies
+--       WHERE schemaname IN ('public','storage') AND 'anon' = ANY (roles)
+--     ) THEN '열려있음 — anon 허용 정책이 남아 있습니다'
+--     WHEN (
+--       SELECT count(*) FROM pg_tables
+--       WHERE schemaname='public'
+--         AND tablename IN ('deals','deal_stage_history','deal_notes','deal_files')
+--         AND rowsecurity
+--     ) < 4 THEN '열려있음 — RLS 가 꺼진 테이블이 있습니다'
+--     ELSE '잠김 — 정상입니다'
+--   END AS 상태;
 -- ================================================================
 
 

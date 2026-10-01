@@ -4,7 +4,7 @@
 
 // [1단계] 데모 모드 (지금 당장 쓸 수 있음, 데이터는 이 브라우저에만 저장)
 // Supabase 연결 후 false로 바꾸세요
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 
 // [2단계] Supabase 설정 (팀 공유용, DEMO_MODE = false 일 때 사용)
 // supabase.com 가입 후 Settings > API 에서 복사

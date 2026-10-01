@@ -440,7 +440,67 @@ function updateCurrentUserInSidebar() {
   }
 }
 
+// Supabase 데이터 마이그레이션 (한 번만 실행)
+async function migrateDataToSupabase() {
+  if (DEMO_MODE || !SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) return;
+  if (sessionStorage.getItem('migration_done')) return;
+
+  try {
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // deals 테이블에 데이터가 있는지 확인
+    const { count: dealCount } = await supabase
+      .from('deals')
+      .select('*', { count: 'exact', head: true });
+
+    if (dealCount > 0) {
+      sessionStorage.setItem('migration_done', 'true');
+      return; // 이미 데이터가 있음
+    }
+
+    // seed-data 로드
+    const deals = DEMO_DEALS_SEED || [];
+    const notes = DEMO_NOTES_SEED || [];
+    const history = DEMO_STAGE_HISTORY_SEED || [];
+
+    // deals 일괄 삽입 (1000개씩 청크)
+    if (deals.length > 0) {
+      for (let i = 0; i < deals.length; i += 1000) {
+        const chunk = deals.slice(i, i + 1000);
+        const { error } = await supabase.from('deals').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    // notes 일괄 삽입
+    if (notes.length > 0) {
+      for (let i = 0; i < notes.length; i += 1000) {
+        const chunk = notes.slice(i, i + 1000);
+        const { error } = await supabase.from('deal_notes').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    // history 일괄 삽입
+    if (history.length > 0) {
+      for (let i = 0; i < history.length; i += 1000) {
+        const chunk = history.slice(i, i + 1000);
+        const { error } = await supabase.from('deal_stage_history').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    sessionStorage.setItem('migration_done', 'true');
+    console.log('✓ Supabase 데이터 마이그레이션 완료');
+  } catch (err) {
+    console.error('Supabase 마이그레이션 오류:', err.message);
+  }
+}
+
 // 초기화
 if (DEMO_MODE) initDemoData();
 checkLogin();
-window.addEventListener('load', updateCurrentUserInSidebar);
+window.addEventListener('load', () => {
+  updateCurrentUserInSidebar();
+  migrateDataToSupabase();
+});

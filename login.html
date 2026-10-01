@@ -266,7 +266,12 @@
       const listDiv = document.getElementById('user-list');
       const errorDiv = document.getElementById('admin-error');
 
-      if (DEMO_MODE || !SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) {
+      if (DEMO_MODE) {
+        listDiv.innerHTML = '<p class="text-muted text-center py-3">데모 모드에서는 사용자 관리가 지원되지 않습니다</p>';
+        return;
+      }
+
+      if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) {
         listDiv.innerHTML = '<p class="text-muted text-center py-3">Supabase가 설정되지 않았습니다</p>';
         return;
       }

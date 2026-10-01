@@ -34,6 +34,7 @@
 | `tools/make_package.py` | IT 전달 패키지 `01_src/` 재생성 + CDN 치환 검사 (맥 공통) |
 | `tools/test_security.js` | 실제 브라우저로 XSS·로그인 차단 32개 항목 검사 (Node + Playwright) |
 | `tools/mac/upload_to_supabase.py` | seed-data.js의 딜 247건·이력을 Supabase로 일괄 업로드 (service_role 키 사용) |
+| `tools/mac/finish_security.sh` | **보안 마무리 한 번에**: 코드 확인 → DB 잠금 판정 → 위험 파일 정리 → 남은 일 안내 (bash+curl만) |
 | `tools/README.md` | 위 스크립트를 언제 어떤 순서로 돌리는지 |
 | `IT전달패키지_v1.0/` | 내부 VDI 배포용 IT 전달 패키지 (아래 참고) |
 | `딜접수목록관리_전달패키지_v1.0.zip` | 위 패키지를 압축한 파일 (사용자가 이름을 바꿈) |
@@ -67,8 +68,14 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
   - 그래서 `보안설정_SQL.sql`은 이름을 추측하지 않고 **네 테이블의 정책을 전부 찾아 지운 뒤**
     새로 만듭니다(`pg_policies` + `DO` 블록). Storage도 'deal-files'를 참조하는 정책만 골라 지웁니다.
     이름 하드코딩 방식으로 되돌리지 마세요. `anon_all_*`가 살아남습니다.
-  - 확인: `SELECT ... FROM pg_policies WHERE 'anon' = ANY (roles)` 가 **0건**이어야 정상.
-    `보안설정_SQL.sql` 하단에 한 번에 판정하는 쿼리가 있습니다.
+  - 확인 방법 두 가지:
+    1. **실제 접근 테스트(권장)**: 맥북에서 `bash tools/mac/finish_security.sh`.
+       anon 키로 네 테이블에 접근해 보고 `잠김/열려있음/애매함`을 판정합니다.
+       설정을 읽는 게 아니라 결과를 보므로 정책이 꼬여 있어도 결론이 납니다.
+       (이 클라우드 세션은 네트워크 정책상 supabase.co 에 연결할 수 없어 직접 확인이 불가능합니다.
+        환경 설정에서 해당 도메인을 허용하면 Claude 가 직접 확인할 수 있습니다.)
+    2. SQL: `SELECT ... FROM pg_policies WHERE 'anon' = ANY (roles)` 가 **0건**이어야 정상.
+       `보안설정_SQL.sql` 하단에 한 번에 판정하는 쿼리가 있습니다.
 
 - **인증 = Supabase Auth** (2026-10-01 교체). 그 전에는 `users` 테이블에 **평문 비밀번호**가 들어 있었고
   읽기·쓰기가 모두 열려 있어 누구나 조회·변경할 수 있었습니다. 로그인 표시도 localStorage 값 하나뿐이라
@@ -155,8 +162,13 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
       `보안설정_SQL.sql`이 기존 정책을 전부 지우도록 수정했으므로 이 실행으로 정리됩니다.
 3-1. ⬜ **`02_RLS정책_SQL에디터에_붙여넣기.sql` 삭제** (맥북). 실행하면 잠금이 풀립니다.
 3-2. ⬜ **`.service_role_key` 삭제** (맥북 + 백업 폴더). 데이터 업로드가 끝났으면 남겨둘 이유가 없습니다.
+   → **3·3-1·3-2 확인과 정리는 `bash tools/mac/finish_security.sh` 한 번으로 처리됩니다.**
+     사용자에게 이 명령 하나만 안내하면 됩니다. SQL 실행만 사람이 해야 합니다.
 4. ⬜ **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 외부인 자가 가입 차단.
 5. ⬜ **GitHub 저장소 비공개 전환** 및 로그인 실제 동작 테스트 (크롬 캐시 때문에 `⌘⇧R` 필요).
+   ※ 비공개 전환은 **Claude 권한으로 불가능합니다**(저장소 설정 변경 도구가 없음). 사용자가 직접:
+     Settings → 맨 아래 Danger Zone → Change visibility → Make private.
+     2026-10-01 기준 저장소는 **공개 상태**입니다(비밀번호는 이력에 올라간 적 없음).
 6. ✅ IT 전달 패키지 재생성 — 완료 (`login.html`·`admin.html` 추가, SQL 잠금, 문서 갱신, zip 재압축)
 7. ⬜ **IT팀에 재전달**: 패키지 내용이 바뀌었습니다. 예전 zip을 이미 보냈다면 새 것으로 다시 보내야 합니다.
    (CLAUDE.md 이전 기록상 첨부 제한으로 막혀 실제 전달은 확인되지 않았음)

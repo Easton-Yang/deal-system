@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>딜 상세 – 딜 관리 시스템</title>
+<link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="main">
+  <div class="page-header">
+    <div style="min-width:0">
+      <h1 class="page-title" id="pageTitle" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        <i class="fas fa-file-alt me-2" style="color:#1a237e"></i>딜 상세
+      </h1>
+      <p class="page-sub" id="pageSub">불러오는 중...</p>
+    </div>
+    <div class="d-flex gap-2 flex-shrink-0">
+      <button class="btn btn-outline-secondary" onclick="toggleEdit()" id="editToggleBtn">
+        <i class="fas fa-edit me-1"></i> 편집
+      </button>
+      <a href="deals.html" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i> 목록
+      </a>
+    </div>
+  </div>
+
+  <div class="content-area" id="mainContent">
+    <div class="text-center py-5 text-muted">
+      <i class="fas fa-spinner fa-spin fa-2x"></i>
+      <p class="mt-3">데이터 불러오는 중...</p>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="vendor/supabase/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+let deal = null;
+let editMode = false;
+const dealId = getUrlParam('id');
+
+if (!dealId) { window.location.href = 'deals.html'; }
+
+// ── 단계 진행 ──────────────────────────────────────────────────
+
+async function changeStageUI(newStage) {
+  if (newStage === deal.current_stage) return;
+  const label = newStage === '패스'
+    ? `정말 이 딜을 "패스"로 처리하시겠습니까?`
+    : `단계를 "${newStage}"(으)로 변경하시겠습니까?`;
+  if (!confirm(label)) return;
+  try {
+    await changeStage(dealId, newStage);
+    deal.current_stage = newStage;
+    showToast(`단계가 "${newStage}"(으)로 변경되었습니다.`, 'success');
+    await load();
+  } catch(e) {
+    showToast('단계 변경 실패: ' + e.message, 'danger');
+  }
+}
+
+// ── 메모 추가 ──────────────────────────────────────────────────
+
+async function addNote() {
+  const ta = document.getElementById('newNoteText');
+  const text = ta.value.trim();
+  if (!text) { showToast('메모 내용을 입력하세요.', 'warning'); return; }
+  try {
+    await createNote(dealId, text, CURRENT_USER);
+    ta.value = '';
+    showToast('메모가 저장되었습니다.', 'success');
+    await renderNotes();
+  } catch(e) {
+    showToast('메모 저장 실패: ' + e.message, 'danger');
+  }
+}
+
+async function deleteNoteUI(noteId) {
+  if (!confirm('이 메모를 삭제하시겠습니까?')) return;
+  try {
+    await deleteNote(noteId);
+    showToast('메모가 삭제되었습니다.', 'success');
+    await renderNotes();
+  } catch(e) {
+    showToast('메모 삭제 실패: ' + e.message, 'danger');
+  }
+}
+
+async function renderNotes() {
+  const notes = await getNotes(dealId);
+  const container = document.getElementById('notesContainer');
+  if (!container) return;
+  if (notes.length === 0) {
+    container.innerHTML = '<p class="text-muted" style="font-size:13px">아직 메모가 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = `<div class="timeline">` + notes.map(n => `
+    <div class="timeline-item">
+      <div class="timeline-dot"></div>
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="timeline-author"><i class="fas fa-user-circle me-1"></i>${n.author}</span>
+        <span class="timeline-date">${formatDateTime(n.created_at)}</span>
+      </div>
+      <div class="timeline-body">
+        ${n.note_text.replace(/\n/g,'<br>')}
+        <div class="text-end mt-2">
+          <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteNoteUI('${n.id}')">
+            <i class="fas fa-trash-alt"></i> 삭제
+          </button>
+        </div>
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+// ── 단계 이력 ──────────────────────────────────────────────────
+
+async function renderStageHistory() {
+  const history = await getStageHistory(dealId);
+  const container = document.getElementById('stageHistoryContainer');
+  if (!container) return;
+  if (history.length === 0) {
+    container.innerHTML = '<p class="text-muted" style="font-size:13px">이력이 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = `<div class="timeline">` + history.map(h => `
+    <div class="timeline-item">
+      <div class="timeline-dot" style="background:#1976d2"></div>
+      <div class="d-flex justify-content-between">
+        <span>${stageBadge(h.stage)}</span>
+        <span class="timeline-date">${formatDateTime(h.changed_at)}${h.changed_by ? ' · ' + h.changed_by : ''}</span>
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+// ── 파일 ───────────────────────────────────────────────────────
+
+async function handleFileUpload(e) {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>업로드 중...';
+  try {
+    for (const file of files) {
+      await uploadFile(dealId, file);
+    }
+    showToast(`${files.length}개 파일이 업로드되었습니다.`, 'success');
+    await renderFiles();
+  } catch(e) {
+    showToast('파일 업로드 실패: ' + e.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-upload me-1"></i>파일 추가';
+    e.target.value = '';
+  }
+}
+
+async function deleteFileUI(fileId, filePath) {
+  if (!confirm('이 파일을 삭제하시겠습니까?')) return;
+  try {
+    await deleteFile(fileId, filePath);
+    showToast('파일이 삭제되었습니다.', 'success');
+    await renderFiles();
+  } catch(e) {
+    showToast('파일 삭제 실패: ' + e.message, 'danger');
+  }
+}
+
+function fileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes >= 1048576) return (bytes/1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024)    return (bytes/1024).toFixed(0) + ' KB';
+  return bytes + ' B';
+}
+
+function fileIcon(name) {
+  const ext = (name||'').split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return 'fa-file-pdf text-danger';
+  if (['xls','xlsx'].includes(ext)) return 'fa-file-excel text-success';
+  if (['doc','docx'].includes(ext)) return 'fa-file-word text-primary';
+  if (['ppt','pptx'].includes(ext)) return 'fa-file-powerpoint text-warning';
+  if (['zip','rar'].includes(ext)) return 'fa-file-archive text-secondary';
+  return 'fa-file text-secondary';
+}
+
+async function renderFiles() {
+  const files = await getFiles(dealId);
+  const container = document.getElementById('filesContainer');
+  if (!container) return;
+  if (files.length === 0) {
+    container.innerHTML = '<p class="text-muted" style="font-size:13px">첨부된 파일이 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = files.map(f => `
+    <div class="file-item">
+      <i class="fas ${fileIcon(f.file_name)} file-icon fa-lg"></i>
+      <div class="flex-grow-1 min-width-0">
+        <div class="file-name">${f.file_name}</div>
+        <div class="file-meta">${fileSize(f.file_size)}${f.uploaded_by ? ' · ' + f.uploaded_by : ''} · ${formatDateTime(f.uploaded_at)}</div>
+      </div>
+      <button class="btn btn-sm btn-outline-danger" onclick="deleteFileUI('${f.id}','${f.file_path||''}')">
+        <i class="fas fa-trash"></i>
+      </button>
+    </div>`).join('');
+}
+
+// ── 편집 모드 ──────────────────────────────────────────────────
+
+function toggleEdit() {
+  editMode = !editMode;
+  const btn = document.getElementById('editToggleBtn');
+  if (editMode) {
+    btn.className = 'btn btn-warning';
+    btn.innerHTML = '<i class="fas fa-times me-1"></i> 편집 취소';
+    renderEditForm();
+  } else {
+    btn.className = 'btn btn-outline-secondary';
+    btn.innerHTML = '<i class="fas fa-edit me-1"></i> 편집';
+    render();
+  }
+}
+
+function renderEditForm() {
+  const editSection = document.getElementById('editSection');
+  if (!editSection) return;
+
+  const assetOptions = ASSET_CLASSES.map(a => `<option value="${a}" ${deal.asset_class===a?'selected':''}>${a}</option>`).join('');
+  const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${c}" ${deal.intake_channel===c?'selected':''}>${c}</option>`).join('');
+  const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${m}" ${deal.assigned_to===m?'selected':''}>${m}</option>`).join('');
+  const resultOptions = ['','투자','패스','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
+
+  editSection.innerHTML = `
+    <div class="detail-section mb-3">
+      <div class="detail-section-header"><i class="fas fa-pencil-alt" style="color:#f57c00"></i> 정보 편집</div>
+      <div class="detail-section-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">딜명 <span class="required-star">*</span></label>
+            <input type="text" id="e_name" class="form-control" value="${deal.deal_name}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">자산군</label>
+            <select id="e_asset" class="form-select">${assetOptions}</select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">인입경로</label>
+            <select id="e_channel" class="form-select">${channelOptions}</select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">인입일자</label>
+            <input type="date" id="e_date" class="form-control" value="${deal.intake_date||''}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">담당자</label>
+            <select id="e_assignee" class="form-select">${assigneeOptions}</select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">딜 규모 (원)</label>
+            <input type="number" id="e_size" class="form-control" value="${deal.deal_size||''}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">소개자/GP명</label>
+            <input type="text" id="e_gp" class="form-control" value="${deal.introducer_gp||''}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">1차 의견</label>
+            <textarea id="e_opinion" class="form-control" rows="3">${deal.first_opinion||''}</textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">최종 결과</label>
+            <select id="e_result" class="form-select">${resultOptions}</select>
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button class="btn btn-secondary" onclick="toggleEdit()">취소</button>
+          <button class="btn btn-primary" onclick="saveEdit()">
+            <i class="fas fa-save me-1"></i> 저장
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function saveEdit() {
+  const name = document.getElementById('e_name').value.trim();
+  if (!name) { showToast('딜명을 입력하세요.', 'warning'); return; }
+
+  const updated = {
+    deal_name:      name,
+    asset_class:    document.getElementById('e_asset').value,
+    intake_channel: document.getElementById('e_channel').value,
+    intake_date:    document.getElementById('e_date').value,
+    assigned_to:    document.getElementById('e_assignee').value,
+    deal_size:      Number(document.getElementById('e_size').value) || null,
+    introducer_gp:  document.getElementById('e_gp').value.trim() || null,
+    first_opinion:  document.getElementById('e_opinion').value.trim() || null,
+    final_result:   document.getElementById('e_result').value || null,
+  };
+
+  try {
+    deal = await updateDeal(dealId, updated);
+    editMode = false;
+    document.getElementById('editToggleBtn').className = 'btn btn-outline-secondary';
+    document.getElementById('editToggleBtn').innerHTML = '<i class="fas fa-edit me-1"></i> 편집';
+    showToast('저장되었습니다.', 'success');
+    await load();
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'danger');
+  }
+}
+
+// ── 렌더링 ─────────────────────────────────────────────────────
+
+function stageProgressHTML(current) {
+  return `<div class="stage-progress">` + STAGES.map(s => {
+    const idx = STAGES.indexOf(s);
+    const curIdx = STAGES.indexOf(current);
+    let cls = '';
+    if (s === current && s === '패스') cls = 'pass-active';
+    else if (s === current) cls = 'active';
+    else if (idx < curIdx && current !== '패스') cls = 'done';
+    return `<div class="stage-step ${cls}" onclick="changeStageUI('${s}')" title="${s}으로 변경">${s}</div>`;
+  }).join('') + `</div>`;
+}
+
+function render() {
+  if (!deal) return;
+
+  document.getElementById('pageTitle').innerHTML =
+    `<i class="fas fa-file-alt me-2" style="color:#1a237e"></i>${deal.deal_name}`;
+  document.getElementById('pageSub').innerHTML =
+    `${assetBadge(deal.asset_class)} &nbsp;${stageBadge(deal.current_stage)}
+     ${deal.final_result ? '&nbsp;' + resultBadge(deal.final_result) : ''}
+     &nbsp;<span class="text-muted" style="font-size:12px">등록: ${formatDateTime(deal.created_at)}</span>`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <!-- 단계 진행 -->
+    <div class="detail-section mb-3">
+      <div class="detail-section-header">
+        <i class="fas fa-route" style="color:#1a237e"></i> 검토 단계
+        <span class="text-muted" style="font-size:12px;font-weight:400;margin-left:8px">클릭하여 단계 변경</span>
+      </div>
+      <div class="detail-section-body">${stageProgressHTML(deal.current_stage)}</div>
+    </div>
+
+    <div class="row g-3">
+      <!-- 왼쪽 -->
+      <div class="col-lg-8">
+
+        <!-- 편집 영역 -->
+        <div id="editSection"></div>
+
+        <!-- 기본 정보 -->
+        <div class="detail-section mb-3" id="infoSection">
+          <div class="detail-section-header"><i class="fas fa-info-circle" style="color:#1a237e"></i> 기본 정보</div>
+          <div class="detail-section-body">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="info-row"><div class="info-label">자산군</div><div class="info-value">${assetBadge(deal.asset_class)}</div></div>
+                <div class="info-row"><div class="info-label">인입경로</div><div class="info-value">${deal.intake_channel}</div></div>
+                <div class="info-row"><div class="info-label">인입일자</div><div class="info-value">${formatDate(deal.intake_date)}</div></div>
+                <div class="info-row"><div class="info-label">담당자</div><div class="info-value"><strong>${deal.assigned_to}</strong></div></div>
+              </div>
+              <div class="col-md-6">
+                <div class="info-row"><div class="info-label">딜 규모</div><div class="info-value"><strong>${formatCurrency(deal.deal_size)}</strong></div></div>
+                <div class="info-row"><div class="info-label">소개자/GP</div><div class="info-value">${deal.introducer_gp || '-'}</div></div>
+                <div class="info-row"><div class="info-label">최종결과</div><div class="info-value">${resultBadge(deal.final_result) || '<span class="text-muted">미정</span>'}</div></div>
+                <div class="info-row"><div class="info-label">최종수정</div><div class="info-value text-muted">${formatDateTime(deal.updated_at)}</div></div>
+              </div>
+            </div>
+            ${deal.first_opinion ? `
+            <hr>
+            <div class="info-row">
+              <div class="info-label">1차 의견</div>
+              <div class="info-value">${deal.first_opinion.replace(/\n/g,'<br>')}</div>
+            </div>` : ''}
+          </div>
+        </div>
+
+        <!-- 검토 메모 -->
+        <div class="detail-section mb-3">
+          <div class="detail-section-header"><i class="fas fa-comments" style="color:#1a237e"></i> 검토 메모</div>
+          <div class="detail-section-body">
+            <div class="mb-3">
+              <textarea id="newNoteText" class="form-control" rows="3"
+                placeholder="검토 의견, 회의 결과, 특이사항 등을 기록하세요..."></textarea>
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="text-muted" style="font-size:12px">작성자: <strong>${CURRENT_USER}</strong></span>
+                <button class="btn btn-primary btn-sm" onclick="addNote()">
+                  <i class="fas fa-plus me-1"></i>메모 추가
+                </button>
+              </div>
+            </div>
+            <hr>
+            <div id="notesContainer"><p class="text-muted">로딩 중...</p></div>
+          </div>
+        </div>
+
+        <!-- 파일 첨부 -->
+        <div class="detail-section">
+          <div class="detail-section-header">
+            <i class="fas fa-paperclip" style="color:#1a237e"></i> 파일 첨부
+            ${DEMO_MODE ? '<span class="badge bg-warning text-dark ms-2" style="font-size:10px">데모모드: 파일명만 기록됨</span>' : ''}
+          </div>
+          <div class="detail-section-body">
+            <div class="mb-3">
+              <input type="file" id="fileInput" class="d-none" multiple onchange="handleFileUpload(event)">
+              <button class="btn btn-outline-primary btn-sm" id="uploadBtn"
+                onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-upload me-1"></i>파일 추가
+              </button>
+              <span class="text-muted ms-2" style="font-size:12px">PDF, 엑셀, 워드, PPT 등</span>
+            </div>
+            <div id="filesContainer"><p class="text-muted" style="font-size:13px">로딩 중...</p></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 오른쪽 -->
+      <div class="col-lg-4">
+
+        <!-- 단계 이력 -->
+        <div class="detail-section mb-3">
+          <div class="detail-section-header"><i class="fas fa-history" style="color:#1a237e"></i> 단계 이력</div>
+          <div class="detail-section-body">
+            <div id="stageHistoryContainer"><p class="text-muted">로딩 중...</p></div>
+          </div>
+        </div>
+
+        <!-- 빠른 메모 -->
+        <div class="card border-0 mb-3" style="background:#fff3e0">
+          <div class="card-body">
+            <h6 class="fw-bold" style="color:#e65100"><i class="fas fa-exclamation-circle me-2"></i>단계 변경 안내</h6>
+            <p style="font-size:12px;color:#6c757d;margin:0">위 단계 바에서 원하는 단계를 클릭하면 즉시 변경됩니다. 변경 이력은 자동으로 기록됩니다.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>`;
+
+  // 편집 모드였으면 폼 다시 렌더링
+  if (editMode) renderEditForm();
+
+  // 비동기 콘텐츠 로드
+  renderNotes();
+  renderStageHistory();
+  renderFiles();
+}
+
+// ── 메인 로드 ──────────────────────────────────────────────────
+
+async function load() {
+  try {
+    deal = await getDeal(dealId);
+    if (!deal) {
+      document.getElementById('mainContent').innerHTML =
+        `<div class="empty-state"><i class="fas fa-exclamation-circle d-block text-danger"></i><p>딜을 찾을 수 없습니다.</p><a href="deals.html" class="btn btn-primary mt-3">목록으로</a></div>`;
+      return;
+    }
+    render();
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML =
+      `<div class="alert alert-danger">데이터 로드 실패: ${e.message}</div>`;
+  }
+}
+
+renderNav('deals');
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>딜 목록 – 딜 관리 시스템</title>
+<link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><i class="fas fa-list me-2" style="color:#1a237e"></i>딜 목록</h1>
+      <p class="page-sub" id="dealCount">불러오는 중...</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <!-- 뷰 전환 -->
+      <div class="btn-group" role="group">
+        <button id="btnList"   class="btn btn-sm btn-primary"          onclick="setView('list')">
+          <i class="fas fa-list me-1"></i>목록
+        </button>
+        <button id="btnKanban" class="btn btn-sm btn-outline-primary"  onclick="setView('kanban')">
+          <i class="fas fa-columns me-1"></i>칸반
+        </button>
+      </div>
+      <a href="deal-new.html" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus me-1"></i>새 딜
+      </a>
+    </div>
+  </div>
+
+  <div class="content-area">
+
+    <!-- 필터 바 -->
+    <div class="filter-bar">
+      <div style="flex:1;min-width:180px">
+        <input type="text" id="filterSearch" class="form-control"
+          placeholder="🔍  딜명 또는 GP명 검색..." style="width:100%">
+      </div>
+      <select id="filterAsset" class="form-select" style="width:130px">
+        <option value="">자산군 전체</option>
+      </select>
+      <select id="filterStage" class="form-select" style="width:120px">
+        <option value="">단계 전체</option>
+      </select>
+      <select id="filterAssignee" class="form-select" style="width:110px">
+        <option value="">담당자 전체</option>
+      </select>
+      <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">
+        <i class="fas fa-undo me-1"></i>초기화
+      </button>
+    </div>
+
+    <!-- ── 목록 뷰 ── -->
+    <div id="listView">
+      <div class="card">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table mb-0">
+              <thead>
+                <tr>
+                  <th style="width:28%">딜명</th>
+                  <th>자산군</th>
+                  <th>인입경로</th>
+                  <th>인입일</th>
+                  <th>담당자</th>
+                  <th>딜 규모</th>
+                  <th>현재 단계</th>
+                  <th>최종결과</th>
+                  <th style="width:60px"></th>
+                </tr>
+              </thead>
+              <tbody id="dealsBody"></tbody>
+            </table>
+          </div>
+          <div id="emptyState" class="empty-state d-none">
+            <i class="fas fa-search d-block"></i>
+            <p>검색 결과가 없습니다</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 칸반 뷰 ── -->
+    <div id="kanbanView" class="d-none">
+      <div class="kanban-hint text-muted mb-2" style="font-size:12px">
+        <i class="fas fa-info-circle me-1"></i>카드를 다른 컬럼으로 드래그하면 단계가 변경됩니다.
+      </div>
+      <div class="kanban-board" id="kanbanBoard"></div>
+      <div id="kanbanEmpty" class="empty-state d-none">
+        <i class="fas fa-search d-block"></i>
+        <p>해당하는 딜이 없습니다</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="fas fa-exclamation-triangle text-danger me-2"></i>딜 삭제</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p><strong id="deleteDealName"></strong> 딜을 삭제하시겠습니까?</p>
+        <p class="text-danger mb-0"><small>삭제된 데이터는 복구할 수 없습니다.</small></p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="vendor/supabase/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+let allDeals = [];
+let currentView = 'list';
+let deleteTargetId = null;
+let dragSrcId = null;
+const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+// ── 뷰 전환 ────────────────────────────────────────────────────
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('listView').classList.toggle('d-none', view !== 'list');
+  document.getElementById('kanbanView').classList.toggle('d-none', view !== 'kanban');
+  document.getElementById('btnList').className   = view === 'list'   ? 'btn btn-sm btn-primary'         : 'btn btn-sm btn-outline-primary';
+  document.getElementById('btnKanban').className = view === 'kanban' ? 'btn btn-sm btn-primary'         : 'btn btn-sm btn-outline-primary';
+  applyFilters();
+}
+
+// ── 필터 ───────────────────────────────────────────────────────
+
+function buildFilters() {
+  const assetSel = document.getElementById('filterAsset');
+  ASSET_CLASSES.forEach(a => {
+    const o = document.createElement('option'); o.value = o.textContent = a; assetSel.appendChild(o);
+  });
+  const stageSel = document.getElementById('filterStage');
+  STAGES.forEach(s => {
+    const o = document.createElement('option'); o.value = o.textContent = s; stageSel.appendChild(o);
+  });
+  const assignSel = document.getElementById('filterAssignee');
+  [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
+    const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
+  });
+}
+
+function resetFilters() {
+  ['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+    const el = document.getElementById(id);
+    el.tagName === 'INPUT' ? (el.value = '') : (el.value = '');
+  });
+  applyFilters();
+}
+
+function filterDeals() {
+  const q     = document.getElementById('filterSearch').value.trim().toLowerCase();
+  const asset = document.getElementById('filterAsset').value;
+  const stage = document.getElementById('filterStage').value;
+  const who   = document.getElementById('filterAssignee').value;
+  return allDeals.filter(d =>
+    (!q     || d.deal_name.toLowerCase().includes(q) || (d.introducer_gp||'').toLowerCase().includes(q)) &&
+    (!asset || d.asset_class === asset) &&
+    (!stage || d.current_stage === stage) &&
+    (!who   || d.assigned_to === who)
+  );
+}
+
+function applyFilters() {
+  const filtered = filterDeals();
+  document.getElementById('dealCount').textContent = `총 ${filtered.length}건`;
+  if (currentView === 'list') renderTable(filtered);
+  else                        renderKanban(filtered);
+}
+
+// ── 목록 뷰 ────────────────────────────────────────────────────
+
+function renderTable(deals) {
+  const tbody = document.getElementById('dealsBody');
+  const empty = document.getElementById('emptyState');
+  if (deals.length === 0) {
+    tbody.innerHTML = '';
+    empty.classList.remove('d-none');
+    return;
+  }
+  empty.classList.add('d-none');
+  tbody.innerHTML = deals.map(d => `
+    <tr onclick="location.href='deal-detail.html?id=${d.id}'" style="cursor:pointer">
+      <td>
+        <div style="font-weight:600">${d.deal_name}</div>
+        ${d.introducer_gp ? `<div style="font-size:11px;color:#6c757d">${d.introducer_gp}</div>` : ''}
+      </td>
+      <td>${assetBadge(d.asset_class)}</td>
+      <td><span class="text-muted">${d.intake_channel}</span></td>
+      <td style="white-space:nowrap">${d.intake_date || '-'}</td>
+      <td>${d.assigned_to}</td>
+      <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
+      <td>${stageBadge(d.current_stage)}</td>
+      <td>${resultBadge(d.final_result)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-danger"
+          onclick="event.stopPropagation(); openDeleteModal('${d.id}','${d.deal_name.replace(/'/g,"\\'")}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── 칸반 뷰 ────────────────────────────────────────────────────
+
+const STAGE_COL_COLOR = {
+  '접수':    '#78909c', '1차검토':'#1a237e', '심층검토':'#e65100',
+  'IC':      '#0277bd', '투자확정':'#2e7d32', '패스':    '#c62828'
+};
+
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  return Math.floor(diff / 86400000);
+}
+
+function kanbanCardHTML(d) {
+  const days = daysSince(d.intake_date || d.created_at);
+  return `
+    <div class="kanban-card"
+      draggable="true"
+      data-id="${d.id}"
+      ondragstart="onDragStart(event,'${d.id}')"
+      ondragend="onDragEnd(event)"
+      onclick="location.href='deal-detail.html?id=${d.id}'">
+      <div class="kc-name">${d.deal_name}</div>
+      <div class="kc-badges">${assetBadge(d.asset_class)}</div>
+      <div class="kc-meta">
+        <span><i class="fas fa-user me-1"></i>${d.assigned_to}</span>
+        ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
+      </div>
+      ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
+      ${d.final_result ? `<div class="mt-1">${resultBadge(d.final_result)}</div>` : ''}
+    </div>`;
+}
+
+function renderKanban(deals) {
+  const board  = document.getElementById('kanbanBoard');
+  const empty  = document.getElementById('kanbanEmpty');
+
+  if (deals.length === 0) {
+    board.innerHTML = '';
+    empty.classList.remove('d-none');
+    return;
+  }
+  empty.classList.add('d-none');
+
+  const byStage = {};
+  STAGES.forEach(s => byStage[s] = []);
+  deals.forEach(d => { if (byStage[d.current_stage]) byStage[d.current_stage].push(d); });
+
+  board.innerHTML = STAGES.map(stage => {
+    const col = STAGE_COL_COLOR[stage] || '#999';
+    const cards = byStage[stage];
+    return `
+      <div class="kanban-col"
+        data-stage="${stage}"
+        ondragover="onDragOver(event)"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event,'${stage}')">
+        <div class="kanban-col-header" style="border-top:3px solid ${col}">
+          <span style="font-weight:700;font-size:13px">${stage}</span>
+          <span class="kanban-count" style="background:${col}">${cards.length}</span>
+        </div>
+        <div class="kanban-cards">
+          ${cards.length === 0
+            ? '<div class="kanban-empty-col">딜 없음</div>'
+            : cards.map(kanbanCardHTML).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── 드래그 앤 드롭 ─────────────────────────────────────────────
+
+function onDragStart(e, id) {
+  dragSrcId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.classList.add('dragging');
+}
+
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.closest('.kanban-col').classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.closest('.kanban-col').classList.remove('drag-over');
+  }
+}
+
+async function onDrop(e, newStage) {
+  e.preventDefault();
+  const col = e.currentTarget.closest('.kanban-col');
+  col.classList.remove('drag-over');
+  if (!dragSrcId) return;
+
+  const deal = allDeals.find(d => d.id === dragSrcId);
+  if (!deal || deal.current_stage === newStage) { dragSrcId = null; return; }
+
+  try {
+    await changeStage(dragSrcId, newStage);
+    deal.current_stage = newStage;
+    showToast(`"${deal.deal_name}" → ${newStage}`, 'success');
+    applyFilters();
+  } catch(err) {
+    showToast('단계 변경 실패: ' + err.message, 'danger');
+  }
+  dragSrcId = null;
+}
+
+// ── 삭제 ───────────────────────────────────────────────────────
+
+function openDeleteModal(id, name) {
+  deleteTargetId = id;
+  document.getElementById('deleteDealName').textContent = name;
+  deleteModal.show();
+}
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+  if (!deleteTargetId) return;
+  try {
+    await deleteDeal(deleteTargetId);
+    deleteModal.hide();
+    showToast('딜이 삭제되었습니다.', 'success');
+    allDeals = allDeals.filter(d => d.id !== deleteTargetId);
+    deleteTargetId = null;
+    applyFilters();
+  } catch(e) {
+    showToast('삭제 실패: ' + e.message, 'danger');
+  }
+});
+
+// ── URL 파라미터 ────────────────────────────────────────────────
+
+function loadUrlParams() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('stage'))       document.getElementById('filterStage').value    = p.get('stage');
+  if (p.get('asset_class')) document.getElementById('filterAsset').value    = p.get('asset_class');
+  if (p.get('assigned_to')) document.getElementById('filterAssignee').value = p.get('assigned_to');
+  if (p.get('view') === 'kanban') setView('kanban');
+}
+
+// 이벤트
+['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+  document.getElementById(id).addEventListener('input', applyFilters);
+  document.getElementById(id).addEventListener('change', applyFilters);
+});
+
+// 초기화
+(async () => {
+  const initNavId = new URLSearchParams(window.location.search).get('view') === 'kanban' ? 'kanban' : 'deals';
+  renderNav(initNavId);
+  buildFilters();
+  loadUrlParams();
+  try {
+    allDeals = await getDeals();
+    applyFilters();
+  } catch(e) {
+    showToast('데이터 로드 오류: ' + e.message, 'danger');
+    document.getElementById('dealCount').textContent = '로드 실패';
+  }
+})();
+</script>
+</body>
+</html>

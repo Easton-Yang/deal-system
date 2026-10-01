@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>딜 관리 시스템 – 대시보드</title>
+<link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><i class="fas fa-chart-pie me-2" style="color:#1a237e"></i>대시보드</h1>
+      <p class="page-sub" id="todayDate"></p>
+    </div>
+    <a href="deal-new.html" class="btn btn-primary">
+      <i class="fas fa-plus me-1"></i> 새 딜 입력
+    </a>
+  </div>
+
+  <div class="content-area">
+
+    <!-- 통계 카드 -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3 col-6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#1a237e"><i class="fas fa-briefcase"></i></div>
+          <div>
+            <div class="stat-value" id="statTotal">-</div>
+            <div class="stat-label">전체 딜</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#1976d2"><i class="fas fa-search"></i></div>
+          <div>
+            <div class="stat-value" id="statReview">-</div>
+            <div class="stat-label">검토 중</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#2e7d32"><i class="fas fa-check-circle"></i></div>
+          <div>
+            <div class="stat-value" id="statConfirmed">-</div>
+            <div class="stat-label">투자확정</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#f57c00"><i class="fas fa-calendar-plus"></i></div>
+          <div>
+            <div class="stat-value" id="statThisMonth">-</div>
+            <div class="stat-label">이번 달 신규</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 차트 + 단계별 분포 -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-5">
+        <div class="card h-100">
+          <div class="card-header"><i class="fas fa-layer-group me-2"></i>자산군별 분포</div>
+          <div class="card-body d-flex align-items-center justify-content-center">
+            <div class="chart-wrap w-100"><canvas id="chartAsset"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-7">
+        <div class="card h-100">
+          <div class="card-header"><i class="fas fa-sitemap me-2"></i>검토 단계별 현황</div>
+          <div class="card-body">
+            <div class="chart-wrap"><canvas id="chartStage"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 단계별 빠른 현황 -->
+    <div class="card mb-4">
+      <div class="card-header"><i class="fas fa-columns me-2"></i>단계별 딜 현황</div>
+      <div class="card-body p-0">
+        <div class="row g-0" id="stageSummaryRow" style="text-align:center"></div>
+      </div>
+    </div>
+
+    <!-- 최근 딜 목록 -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-clock me-2"></i>최근 접수 딜</span>
+        <a href="deals.html" class="btn btn-sm btn-outline-primary">전체 보기</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>딜명</th><th>자산군</th><th>담당자</th>
+                <th>딜 규모</th><th>현재 단계</th><th>인입일</th>
+              </tr>
+            </thead>
+            <tbody id="recentDealsBody"></tbody>
+          </table>
+        </div>
+        <div id="recentEmpty" class="empty-state d-none">
+          <i class="fas fa-inbox d-block"></i>
+          <p>딜이 없습니다</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="vendor/chartjs/chart.umd.min.js"></script>
+<script src="vendor/supabase/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+(async () => {
+  renderNav('dashboard');
+
+  const now = new Date();
+  document.getElementById('todayDate').textContent =
+    `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 기준`;
+
+  const deals = await getDeals();
+
+  // 통계
+  const reviewing = deals.filter(d => ['1차검토','심층검토','IC'].includes(d.current_stage));
+  const confirmed = deals.filter(d => d.current_stage === '투자확정');
+  const thisMonth = deals.filter(d => {
+    const d2 = new Date(d.intake_date || d.created_at);
+    return d2.getFullYear() === now.getFullYear() && d2.getMonth() === now.getMonth();
+  });
+
+  document.getElementById('statTotal').textContent = deals.length;
+  document.getElementById('statReview').textContent = reviewing.length;
+  document.getElementById('statConfirmed').textContent = confirmed.length;
+  document.getElementById('statThisMonth').textContent = thisMonth.length;
+
+  // 자산군 도넛 차트
+  const assetCount = {};
+  ASSET_CLASSES.forEach(a => assetCount[a] = 0);
+  deals.forEach(d => { if (assetCount[d.asset_class] !== undefined) assetCount[d.asset_class]++; });
+  const assetData = ASSET_CLASSES.filter(a => assetCount[a] > 0);
+  new Chart(document.getElementById('chartAsset'), {
+    type: 'doughnut',
+    data: {
+      labels: assetData,
+      datasets: [{
+        data: assetData.map(a => assetCount[a]),
+        backgroundColor: assetData.map(a => ASSET_COLOR[a]),
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: { plugins:{ legend:{ position:'right', labels:{ font:{size:12}, padding:10 } } }, maintainAspectRatio:false }
+  });
+
+  // 단계 막대 차트
+  const stageCount = {};
+  STAGES.forEach(s => stageCount[s] = 0);
+  deals.forEach(d => { if (stageCount[d.current_stage] !== undefined) stageCount[d.current_stage]++; });
+  const stageBgColors = ['#9e9e9e','#1a237e','#f57c00','#0288d1','#2e7d32','#c62828'];
+  new Chart(document.getElementById('chartStage'), {
+    type: 'bar',
+    data: {
+      labels: STAGES,
+      datasets: [{ data: STAGES.map(s => stageCount[s]), backgroundColor: stageBgColors, borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      plugins: { legend:{ display:false } },
+      scales: { y:{ beginAtZero:true, ticks:{ stepSize:1 } } },
+      maintainAspectRatio: false
+    }
+  });
+
+  // 단계별 요약
+  const summaryRow = document.getElementById('stageSummaryRow');
+  STAGES.forEach((s, i) => {
+    const cnt = stageCount[s];
+    const col = stageBgColors[i];
+    const div = document.createElement('div');
+    div.className = 'col border-end py-3';
+    div.style.cursor = 'pointer';
+    div.innerHTML = `
+      <div style="font-size:22px;font-weight:700;color:${col}">${cnt}</div>
+      <div style="font-size:11px;color:#6c757d;margin-top:2px">${s}</div>`;
+    div.onclick = () => { window.location.href = `deals.html?stage=${encodeURIComponent(s)}`; };
+    summaryRow.appendChild(div);
+  });
+
+  // 최근 딜 목록 (최대 8개)
+  const tbody = document.getElementById('recentDealsBody');
+  const recent = deals.slice(0, 8);
+  if (recent.length === 0) {
+    document.getElementById('recentEmpty').classList.remove('d-none');
+  } else {
+    tbody.innerHTML = recent.map(d => `
+      <tr onclick="location.href='deal-detail.html?id=${d.id}'">
+        <td><strong>${d.deal_name}</strong></td>
+        <td>${assetBadge(d.asset_class)}</td>
+        <td>${d.assigned_to}</td>
+        <td>${formatCurrency(d.deal_size)}</td>
+        <td>${stageBadge(d.current_stage)}</td>
+        <td>${formatDate(d.intake_date)}</td>
+      </tr>`).join('');
+  }
+})();
+</script>
+</body>
+</html>

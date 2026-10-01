@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>새 딜 입력 – 딜 관리 시스템</title>
+<link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><i class="fas fa-plus-circle me-2" style="color:#1a237e"></i>새 딜 입력</h1>
+      <p class="page-sub">딜 정보를 입력하세요. <span class="required-star">*</span> 표시는 필수 항목입니다.</p>
+    </div>
+    <a href="deals.html" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i> 목록으로
+    </a>
+  </div>
+
+  <div class="content-area">
+    <form id="dealForm" novalidate>
+      <div class="row g-4">
+
+        <!-- 왼쪽 컬럼 -->
+        <div class="col-lg-8">
+
+          <!-- 기본 정보 -->
+          <div class="detail-section mb-4">
+            <div class="detail-section-header">
+              <i class="fas fa-info-circle" style="color:#1a237e"></i> 기본 정보
+            </div>
+            <div class="detail-section-body">
+              <div class="mb-3">
+                <label class="form-label">딜명 (프로젝트명) <span class="required-star">*</span></label>
+                <input type="text" id="dealName" class="form-control"
+                  placeholder="예) 테크스타트업A 시리즈B 투자" required maxlength="200">
+                <div class="invalid-feedback">딜명을 입력하세요.</div>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">자산군 <span class="required-star">*</span></label>
+                  <select id="assetClass" class="form-select" required>
+                    <option value="">선택하세요</option>
+                  </select>
+                  <div class="invalid-feedback">자산군을 선택하세요.</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">인입경로 <span class="required-star">*</span></label>
+                  <select id="intakeChannel" class="form-select" required>
+                    <option value="">선택하세요</option>
+                  </select>
+                  <div class="invalid-feedback">인입경로를 선택하세요.</div>
+                </div>
+              </div>
+
+              <div class="row g-3 mt-1">
+                <div class="col-md-6">
+                  <label class="form-label">인입일자 <span class="required-star">*</span></label>
+                  <input type="date" id="intakeDate" class="form-control" required>
+                  <div class="invalid-feedback">인입일자를 선택하세요.</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">담당자 <span class="required-star">*</span></label>
+                  <select id="assignedTo" class="form-select" required>
+                    <option value="">선택하세요</option>
+                  </select>
+                  <div class="invalid-feedback">담당자를 선택하세요.</div>
+                </div>
+              </div>
+
+              <div class="row g-3 mt-1">
+                <div class="col-md-6">
+                  <label class="form-label">딜 규모 (투자금액)</label>
+                  <div class="input-group">
+                    <input type="number" id="dealSize" class="form-control"
+                      placeholder="예) 5000000000" min="0">
+                    <span class="input-group-text">원</span>
+                  </div>
+                  <div class="form-text" id="dealSizePreview" style="color:#1a237e;font-weight:600"></div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">소개자 / GP명</label>
+                  <input type="text" id="introducerGp" class="form-control"
+                    placeholder="예) 소풍벤처스, IMM PE">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 초기 검토 -->
+          <div class="detail-section">
+            <div class="detail-section-header">
+              <i class="fas fa-comment-alt" style="color:#1a237e"></i> 초기 검토 메모 (선택)
+            </div>
+            <div class="detail-section-body">
+              <div class="mb-3">
+                <label class="form-label">1차 의견</label>
+                <textarea id="firstOpinion" class="form-control" rows="3"
+                  placeholder="초기 검토 의견을 간략히 적어주세요..."></textarea>
+              </div>
+              <div>
+                <label class="form-label">검토 메모</label>
+                <textarea id="initNote" class="form-control" rows="3"
+                  placeholder="딜 접수 시 특이사항, 인입 경위 등을 기록하세요..."></textarea>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 오른쪽 컬럼 -->
+        <div class="col-lg-4">
+
+          <!-- 검토 단계 -->
+          <div class="detail-section mb-4">
+            <div class="detail-section-header">
+              <i class="fas fa-tasks" style="color:#1a237e"></i> 초기 단계 설정
+            </div>
+            <div class="detail-section-body">
+              <label class="form-label">현재 단계 <span class="required-star">*</span></label>
+              <div id="stageSelector">
+                <!-- 단계 버튼이 여기에 렌더링됩니다 -->
+              </div>
+              <input type="hidden" id="currentStage" value="접수" required>
+              <div class="form-text mt-2">기본값: 접수. 이미 진행 중인 딜은 해당 단계를 선택하세요.</div>
+            </div>
+          </div>
+
+          <!-- 안내 -->
+          <div class="card border-0" style="background:#eef2ff">
+            <div class="card-body">
+              <h6 class="fw-bold" style="color:#1a237e"><i class="fas fa-lightbulb me-2"></i>단계 안내</h6>
+              <ul class="mb-0" style="font-size:12px;padding-left:16px">
+                <li class="mb-1"><strong>접수</strong> – 딜 최초 인입</li>
+                <li class="mb-1"><strong>1차검토</strong> – 기초 분석 진행</li>
+                <li class="mb-1"><strong>심층검토</strong> – 실사·상세 분석</li>
+                <li class="mb-1"><strong>IC</strong> – 투자심의위원회</li>
+                <li class="mb-1"><strong>투자확정</strong> – 최종 투자 결정</li>
+                <li><strong>패스</strong> – 검토 중단</li>
+              </ul>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 저장 버튼 -->
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="deals.html" class="btn btn-outline-secondary btn-lg px-4">취소</a>
+        <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
+          <i class="fas fa-save me-2"></i>딜 저장
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="vendor/supabase/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+let selectedStage = '접수';
+
+function buildSelects() {
+  ASSET_CLASSES.forEach(a => {
+    const o = document.createElement('option');
+    o.value = o.textContent = a;
+    document.getElementById('assetClass').appendChild(o);
+  });
+  INTAKE_CHANNELS.forEach(c => {
+    const o = document.createElement('option');
+    o.value = o.textContent = c;
+    document.getElementById('intakeChannel').appendChild(o);
+  });
+  TEAM_MEMBERS.forEach(m => {
+    const o = document.createElement('option');
+    o.value = o.textContent = m;
+    document.getElementById('assignedTo').appendChild(o);
+  });
+
+  // 오늘 날짜 기본값
+  document.getElementById('intakeDate').value = new Date().toISOString().split('T')[0];
+
+  // 현재 사용자 기본 선택
+  document.getElementById('assignedTo').value = CURRENT_USER;
+}
+
+function buildStageSelector() {
+  const container = document.getElementById('stageSelector');
+  container.innerHTML = STAGES.map(s => `
+    <button type="button"
+      class="btn btn-sm me-1 mb-2 ${s === selectedStage ? 'btn-primary' : 'btn-outline-secondary'}"
+      onclick="selectStage('${s}')"
+      id="stageBtn_${s.replace(/\s/g,'_')}"
+    >${s}</button>`).join('');
+}
+
+function selectStage(stage) {
+  selectedStage = stage;
+  document.getElementById('currentStage').value = stage;
+  STAGES.forEach(s => {
+    const btn = document.getElementById('stageBtn_' + s.replace(/\s/g,'_'));
+    if (!btn) return;
+    btn.className = `btn btn-sm me-1 mb-2 ${s === stage ? 'btn-primary' : 'btn-outline-secondary'}`;
+  });
+}
+
+// 딜 규모 한글 미리보기
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('dealSize').addEventListener('input', function() {
+    const preview = document.getElementById('dealSizePreview');
+    const val = Number(this.value);
+    preview.textContent = val > 0 ? '→ ' + formatCurrency(val) : '';
+  });
+});
+
+// 폼 제출
+document.getElementById('dealForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  form.classList.add('was-validated');
+
+  if (!form.checkValidity()) {
+    showToast('필수 항목을 모두 입력하세요.', 'warning');
+    return;
+  }
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>저장 중...';
+
+  try {
+    const dealData = {
+      deal_name:       document.getElementById('dealName').value.trim(),
+      intake_channel:  document.getElementById('intakeChannel').value,
+      intake_date:     document.getElementById('intakeDate').value,
+      asset_class:     document.getElementById('assetClass').value,
+      assigned_to:     document.getElementById('assignedTo').value,
+      deal_size:       Number(document.getElementById('dealSize').value) || null,
+      introducer_gp:   document.getElementById('introducerGp').value.trim() || null,
+      current_stage:   selectedStage,
+      first_opinion:   document.getElementById('firstOpinion').value.trim() || null,
+    };
+
+    const created = await createDeal(dealData);
+
+    // 초기 메모가 있으면 저장
+    const noteText = document.getElementById('initNote').value.trim();
+    if (noteText) {
+      await createNote(created.id, noteText, CURRENT_USER);
+    }
+
+    showToast('딜이 성공적으로 등록되었습니다!', 'success');
+    setTimeout(() => {
+      window.location.href = `deal-detail.html?id=${created.id}`;
+    }, 800);
+  } catch(err) {
+    showToast('저장 실패: ' + err.message, 'danger');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>딜 저장';
+  }
+});
+
+renderNav('new');
+buildSelects();
+buildStageSelector();
+</script>
+</body>
+</html>

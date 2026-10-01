@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>진행경과 – 딜 관리 시스템</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="main">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        <i class="fas fa-project-diagram me-2" style="color:#1a237e"></i>딜 진행경과
+      </h1>
+      <p class="page-sub">각 딜이 단계별로 얼마나 소요됐는지 한눈에 확인합니다.</p>
+    </div>
+    <a href="deal-new.html" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus me-1"></i>새 딜
+    </a>
+  </div>
+
+  <div class="content-area">
+
+    <!-- 필터 바 -->
+    <div class="filter-bar mb-3">
+      <div style="font-size:13px;font-weight:600;color:#555;white-space:nowrap">표시 단계:</div>
+      <div id="stageFilterBtns" class="d-flex flex-wrap gap-1">
+        <!-- JS에서 렌더링 -->
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <select id="filterAssignee" class="form-select form-select-sm" style="width:110px">
+          <option value="">담당자 전체</option>
+        </select>
+        <select id="sortBy" class="form-select form-select-sm" style="width:130px">
+          <option value="intake_date">인입일 순</option>
+          <option value="total_days">소요일 긴 순</option>
+          <option value="current_stage">현재 단계 순</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 범례 -->
+    <div class="d-flex align-items-center gap-4 mb-3" style="font-size:12px;color:#666">
+      <div class="d-flex align-items-center gap-1">
+        <div style="width:20px;height:10px;background:#1a237e;border-radius:3px;opacity:.8"></div>완료 단계
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <div style="width:20px;height:10px;background:#f57c00;border-radius:3px"></div>현재 단계 (진행 중)
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <div style="width:20px;height:10px;background:#e0e0e0;border-radius:3px"></div>미진입 단계
+      </div>
+      <span class="text-muted">|</span>
+      <span>막대 클릭 → 딜 상세로 이동</span>
+    </div>
+
+    <!-- 딜 타임라인 목록 -->
+    <div id="timelineList">
+      <div class="text-center py-5 text-muted">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <p class="mt-3">불러오는 중...</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+// 기본 표시 단계: 패스 제외, 접수도 포함
+let visibleStages = new Set(['접수', '1차검토', '심층검토', 'IC', '투자확정']);
+let allData = []; // { deal, stageMap, totalDays }
+const STAGE_ACTIVE_COLOR  = '#f57c00';
+const STAGE_DONE_COLORS   = ['#3949ab','#1e88e5','#039be5','#00897b','#43a047'];
+const STAGE_PENDING_COLOR = '#e8eaf6';
+const STAGE_PASS_COLOR    = '#ef9a9a';
+
+// ── 타임라인 계산 ──────────────────────────────────────────────
+
+async function buildTimelineData(deal) {
+  const history = await getStageHistory(deal.id);
+  const now = new Date();
+  const stageMap = {}; // stage -> { enteredAt, days, isCurrent, isPast }
+
+  const sorted = [...history].sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at));
+
+  sorted.forEach((h, i) => {
+    const entered  = new Date(h.changed_at);
+    const next     = sorted[i + 1];
+    const exitDate = next ? new Date(next.changed_at) : now;
+    const days     = Math.max(1, Math.ceil((exitDate - entered) / 86400000));
+    stageMap[h.stage] = {
+      enteredAt: h.changed_at,
+      days,
+      isCurrent: !next && h.stage === deal.current_stage,
+      isPast:    !!next
+    };
+  });
+
+  // 이력 없으면 intake_date 기준 현재 단계만 표시
+  if (sorted.length === 0) {
+    const start = new Date(deal.intake_date || deal.created_at);
+    const days  = Math.max(1, Math.ceil((now - start) / 86400000));
+    stageMap[deal.current_stage] = {
+      enteredAt: deal.intake_date || deal.created_at,
+      days, isCurrent: true, isPast: false
+    };
+  }
+
+  // 패스 경우 패스 단계 색상 별도 처리
+  const totalDays = Object.values(stageMap).reduce((s, v) => s + v.days, 0);
+  return { deal, stageMap, totalDays };
+}
+
+// ── 타임라인 카드 렌더링 ───────────────────────────────────────
+
+function renderTimelineCard(item) {
+  const { deal, stageMap, totalDays } = item;
+  const isPass = deal.current_stage === '패스';
+
+  // 단계 바 생성 (접수~투자확정 또는 패스까지)
+  const displayStages = isPass ? STAGES : STAGES.filter(s => s !== '패스');
+
+  const bars = displayStages.map((stage, stageIdx) => {
+    const info = stageMap[stage];
+    if (!info) {
+      // 미진입 단계
+      return `<div class="tl-seg tl-pending" style="flex:1;min-width:30px" title="${stage}: 미진입">
+        <div class="tl-seg-label">${stage}</div>
+        <div class="tl-seg-days">-</div>
+      </div>`;
+    }
+
+    const pct = totalDays > 0 ? Math.max(info.days / totalDays, 0.04) : 0.1;
+    let bgColor;
+    if (isPass && stage === '패스') bgColor = STAGE_PASS_COLOR;
+    else if (info.isCurrent)         bgColor = STAGE_ACTIVE_COLOR;
+    else                             bgColor = STAGE_DONE_COLORS[stageIdx % STAGE_DONE_COLORS.length];
+    const textColor = info.isCurrent || bgColor === STAGE_PASS_COLOR ? '#fff' : '#fff';
+
+    const daysLabel = info.isCurrent
+      ? `${info.days}일째 ▶`
+      : `${info.days}일`;
+
+    return `<div class="tl-seg" style="flex:${pct};min-width:40px;background:${bgColor};color:${textColor}"
+      title="${stage}: ${info.isCurrent ? '진행 중 ' : ''}${info.days}일 (${formatDateTime(info.enteredAt)})">
+      <div class="tl-seg-label">${stage}</div>
+      <div class="tl-seg-days">${daysLabel}</div>
+    </div>`;
+  }).join('');
+
+  const intakeDate   = deal.intake_date ? deal.intake_date : deal.created_at.split('T')[0];
+  const totalLabel   = isPass ? `총 ${totalDays}일 소요` : `진행 ${totalDays}일째`;
+  const headerColor  = isPass ? '#c62828' : '#1a237e';
+
+  return `
+    <div class="tl-card" onclick="location.href='deal-detail.html?id=${deal.id}'" title="클릭하여 딜 상세 보기">
+      <div class="tl-card-header">
+        <div class="tl-card-left">
+          <div class="tl-deal-name">${deal.deal_name}</div>
+          <div class="tl-deal-meta">
+            ${assetBadge(deal.asset_class)}
+            ${stageBadge(deal.current_stage)}
+            ${deal.final_result ? resultBadge(deal.final_result) : ''}
+            <span class="text-muted ms-1"><i class="fas fa-user me-1"></i>${deal.assigned_to}</span>
+            ${deal.deal_size ? `<span class="text-muted"><i class="fas fa-won-sign me-1"></i>${formatCurrency(deal.deal_size)}</span>` : ''}
+            <span class="text-muted"><i class="fas fa-calendar me-1"></i>인입 ${intakeDate}</span>
+          </div>
+        </div>
+        <div class="tl-total" style="color:${headerColor}">
+          <div class="tl-total-num">${totalDays}</div>
+          <div class="tl-total-label">${isPass ? '소요일' : '진행일'}</div>
+        </div>
+      </div>
+      <div class="tl-bar-wrap">
+        ${bars}
+      </div>
+    </div>`;
+}
+
+// ── 렌더링 ─────────────────────────────────────────────────────
+
+function getFilteredSorted() {
+  const who    = document.getElementById('filterAssignee').value;
+  const sortBy = document.getElementById('sortBy').value;
+
+  let list = allData.filter(item => {
+    if (!visibleStages.has(item.deal.current_stage)) return false;
+    if (who && item.deal.assigned_to !== who)         return false;
+    return true;
+  });
+
+  if (sortBy === 'total_days') {
+    list = list.sort((a, b) => b.totalDays - a.totalDays);
+  } else if (sortBy === 'current_stage') {
+    list = list.sort((a, b) => STAGES.indexOf(a.deal.current_stage) - STAGES.indexOf(b.deal.current_stage));
+  } else {
+    list = list.sort((a, b) => new Date(b.deal.intake_date || b.deal.created_at) - new Date(a.deal.intake_date || a.deal.created_at));
+  }
+  return list;
+}
+
+function render() {
+  const list = getFilteredSorted();
+  const container = document.getElementById('timelineList');
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-chart-bar d-block"></i>
+        <p>표시할 딜이 없습니다.<br>
+        <a href="deals.html">딜 목록</a>에서 필터를 조정해 보세요.</p>
+      </div>`;
+    return;
+  }
+  container.innerHTML = list.map(renderTimelineCard).join('');
+}
+
+// ── 단계 필터 버튼 ─────────────────────────────────────────────
+
+const STAGE_BTN_COLOR = {
+  '접수':    '#78909c', '1차검토':'#1a237e', '심층검토':'#e65100',
+  'IC':      '#0277bd', '투자확정':'#2e7d32', '패스':    '#c62828'
+};
+
+function buildStageFilterBtns() {
+  const container = document.getElementById('stageFilterBtns');
+  container.innerHTML = STAGES.map(s => {
+    const active = visibleStages.has(s);
+    const col    = STAGE_BTN_COLOR[s];
+    return `<button id="sfBtn_${s}" class="btn btn-sm ${active ? '' : 'btn-outline-secondary'}"
+      style="${active ? `background:${col};border-color:${col};color:#fff` : ''};font-size:12px"
+      onclick="toggleStageFilter('${s}')">${s}</button>`;
+  }).join('');
+}
+
+function toggleStageFilter(stage) {
+  if (visibleStages.has(stage)) {
+    if (visibleStages.size === 1) return; // 최소 1개 유지
+    visibleStages.delete(stage);
+  } else {
+    visibleStages.add(stage);
+  }
+  buildStageFilterBtns();
+  render();
+}
+
+// ── 초기화 ─────────────────────────────────────────────────────
+
+(async () => {
+  renderNav('portfolio');
+
+  // 담당자 필터
+  const assignSel = document.getElementById('filterAssignee');
+  [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
+    const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
+  });
+
+  ['filterAssignee','sortBy'].forEach(id =>
+    document.getElementById(id).addEventListener('change', render)
+  );
+
+  buildStageFilterBtns();
+
+  try {
+    const deals = await getDeals();
+    // 모든 딜의 타임라인 데이터 병렬 로드
+    allData = await Promise.all(deals.map(buildTimelineData));
+    render();
+  } catch(e) {
+    document.getElementById('timelineList').innerHTML =
+      `<div class="alert alert-danger">데이터 로드 실패: ${e.message}</div>`;
+  }
+})();
+</script>
+</body>
+</html>

@@ -140,19 +140,29 @@ ALTER TABLE deal_stage_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_notes         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_files         ENABLE ROW LEVEL SECURITY;
 
--- 다시 실행해도 오류가 나지 않도록 같은 이름의 정책을 먼저 제거
-DROP POLICY IF EXISTS "deals_select_auth"   ON deals;
-DROP POLICY IF EXISTS "deals_insert_auth"   ON deals;
-DROP POLICY IF EXISTS "deals_update_auth"   ON deals;
-DROP POLICY IF EXISTS "deals_delete_auth"   ON deals;
-DROP POLICY IF EXISTS "history_select_auth" ON deal_stage_history;
-DROP POLICY IF EXISTS "history_insert_auth" ON deal_stage_history;
-DROP POLICY IF EXISTS "notes_select_auth"   ON deal_notes;
-DROP POLICY IF EXISTS "notes_insert_auth"   ON deal_notes;
-DROP POLICY IF EXISTS "notes_delete_auth"   ON deal_notes;
-DROP POLICY IF EXISTS "files_select_auth"   ON deal_files;
-DROP POLICY IF EXISTS "files_insert_auth"   ON deal_files;
-DROP POLICY IF EXISTS "files_delete_auth"   ON deal_files;
+-- 기존 정책을 '전부' 제거합니다 (이름을 하드코딩하지 않습니다)
+--
+-- 이름을 하나하나 적어 지우면, 다른 이름으로 만들어진 느슨한 정책이
+-- 살아남습니다. PostgreSQL 은 허용 정책을 OR 로 합치므로, 그런 정책이
+-- 하나라도 남으면 아래 authenticated 전용 정책을 추가해도 느슨한 쪽이
+-- 이깁니다. 즉 잠금이 걸리지 않습니다.
+--
+-- (실제 사례: 이 시스템의 클라우드 프로젝트에 로그인 기능이 없던 시절
+--  'TO anon' 전체 허용 정책 anon_all_deals 등이 만들어져 있었고,
+--  이름을 하드코딩해 지우는 방식으로는 제거되지 않았습니다.)
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT policyname, tablename
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('deals', 'deal_stage_history', 'deal_notes', 'deal_files')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
+    RAISE NOTICE '기존 정책 제거: %.%', r.tablename, r.policyname;
+  END LOOP;
+END $$;
 
 -- deals
 CREATE POLICY "deals_select_auth" ON deals

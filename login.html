@@ -170,6 +170,16 @@
 
       <!-- 관리자 패널 (비밀번호 확인 후 표시) -->
       <div id="admin-panel-section" class="d-none">
+        <div id="migration-status"></div>
+
+        <h5 class="mb-3">데이터 마이그레이션</h5>
+        <p class="text-muted mb-3" style="font-size:13px">기존 데이터(247건)를 Supabase로 업로드합니다</p>
+        <button type="button" class="btn btn-success w-100 mb-3" onclick="manualMigrateDataToSupabase()">
+          <i class="fas fa-upload me-2"></i>데이터 업로드 시작
+        </button>
+
+        <hr class="my-3">
+
         <h5 class="mb-3">사용자 비밀번호 관리</h5>
         <div id="admin-error" class="alert alert-danger d-none" role="alert"></div>
         <div id="admin-success" class="alert alert-success d-none" role="alert"></div>

@@ -497,6 +497,84 @@ async function migrateDataToSupabase() {
   }
 }
 
+// 수동 데이터 마이그레이션 (관리자용)
+async function manualMigrateDataToSupabase() {
+  if (DEMO_MODE) {
+    alert('데모 모드에서는 마이그레이션을 수행할 수 없습니다.');
+    return false;
+  }
+
+  if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) {
+    alert('Supabase가 설정되지 않았습니다.');
+    return false;
+  }
+
+  if (!confirm('247건의 딜 데이터를 Supabase로 업로드하시겠습니까?')) {
+    return false;
+  }
+
+  try {
+    const statusDiv = document.getElementById('migration-status');
+    if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>데이터를 업로드 중입니다... 잠깐 기다려주세요.</div>';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // deals 테이블에 데이터가 있는지 확인
+    const { count: dealCount } = await supabase
+      .from('deals')
+      .select('*', { count: 'exact', head: true });
+
+    if (dealCount > 0) {
+      if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-warning">이미 ' + dealCount + '건의 데이터가 존재합니다. 건너뛰었습니다.</div>';
+      return false;
+    }
+
+    // seed-data 로드
+    const deals = DEMO_DEALS_SEED || [];
+    const notes = DEMO_NOTES_SEED || [];
+    const history = DEMO_STAGE_HISTORY_SEED || [];
+
+    // deals 일괄 삽입
+    if (deals.length > 0) {
+      for (let i = 0; i < deals.length; i += 1000) {
+        const chunk = deals.slice(i, i + 1000);
+        const { error } = await supabase.from('deals').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    // notes 일괄 삽입
+    if (notes.length > 0) {
+      for (let i = 0; i < notes.length; i += 1000) {
+        const chunk = notes.slice(i, i + 1000);
+        const { error } = await supabase.from('deal_notes').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    // history 일괄 삽입
+    if (history.length > 0) {
+      for (let i = 0; i < history.length; i += 1000) {
+        const chunk = history.slice(i, i + 1000);
+        const { error } = await supabase.from('deal_stage_history').insert(chunk);
+        if (error) throw error;
+      }
+    }
+
+    if (statusDiv) {
+      statusDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>데이터 마이그레이션 완료! ' + deals.length + '건의 딜이 업로드되었습니다. 페이지를 새로 고침해주세요.</div>';
+    }
+    return true;
+  } catch (err) {
+    const statusDiv = document.getElementById('migration-status');
+    if (statusDiv) {
+      statusDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>마이그레이션 오류: ' + err.message + '</div>';
+    }
+    console.error('마이그레이션 오류:', err);
+    return false;
+  }
+}
+
 // 초기화
 if (DEMO_MODE) initDemoData();
 checkLogin();

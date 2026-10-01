@@ -203,19 +203,19 @@ function renderTable(deals) {
   tbody.innerHTML = deals.map(d => `
     <tr onclick="location.href='deal-detail.html?id=${d.id}'" style="cursor:pointer">
       <td>
-        <div style="font-weight:600">${d.deal_name}</div>
-        ${d.introducer_gp ? `<div style="font-size:11px;color:#6c757d">${d.introducer_gp}</div>` : ''}
+        <div style="font-weight:600">${escapeHtml(d.deal_name)}</div>
+        ${d.introducer_gp ? `<div style="font-size:11px;color:#6c757d">${escapeHtml(d.introducer_gp)}</div>` : ''}
       </td>
       <td>${assetBadge(d.asset_class)}</td>
-      <td><span class="text-muted">${d.intake_channel}</span></td>
-      <td style="white-space:nowrap">${d.intake_date || '-'}</td>
-      <td>${d.assigned_to}</td>
+      <td><span class="text-muted">${escapeHtml(d.intake_channel)}</span></td>
+      <td style="white-space:nowrap">${escapeHtml(d.intake_date || '-')}</td>
+      <td>${escapeHtml(d.assigned_to)}</td>
       <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
       <td>${stageBadge(d.current_stage)}</td>
       <td>${resultBadge(d.final_result)}</td>
       <td>
-        <button class="btn btn-sm btn-outline-danger"
-          onclick="event.stopPropagation(); openDeleteModal('${d.id}','${d.deal_name.replace(/'/g,"\\'")}')">
+        <button type="button" class="btn btn-sm btn-outline-danger js-delete-deal"
+          data-id="${escapeHtml(d.id)}" data-name="${escapeHtml(d.deal_name)}">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -244,10 +244,10 @@ function kanbanCardHTML(d) {
       ondragstart="onDragStart(event,'${d.id}')"
       ondragend="onDragEnd(event)"
       onclick="location.href='deal-detail.html?id=${d.id}'">
-      <div class="kc-name">${d.deal_name}</div>
+      <div class="kc-name">${escapeHtml(d.deal_name)}</div>
       <div class="kc-badges">${assetBadge(d.asset_class)}</div>
       <div class="kc-meta">
-        <span><i class="fas fa-user me-1"></i>${d.assigned_to}</span>
+        <span><i class="fas fa-user me-1"></i>${escapeHtml(d.assigned_to)}</span>
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
       ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
@@ -329,7 +329,7 @@ async function onDrop(e, newStage) {
   try {
     await changeStage(dragSrcId, newStage);
     deal.current_stage = newStage;
-    showToast(`"${deal.deal_name}" → ${newStage}`, 'success');
+    showToast(`"${escapeHtml(deal.deal_name)}" → ${escapeHtml(newStage)}`, 'success');
     applyFilters();
   } catch(err) {
     showToast('단계 변경 실패: ' + err.message, 'danger');
@@ -368,6 +368,22 @@ function loadUrlParams() {
   if (p.get('assigned_to')) document.getElementById('filterAssignee').value = p.get('assigned_to');
   if (p.get('view') === 'kanban') setView('kanban');
 }
+
+// 삭제 버튼 (이벤트 위임)
+// 예전에는 버튼의 onclick 속성에 딜명을 문자열로 끼워 넣었습니다.
+// 딜명에 따옴표가 들어가면 속성을 벗어나 임의 코드가 실행될 수 있어,
+// data-* 속성에서 값을 읽는 방식으로 바꿨습니다.
+//
+// ※ 'true'(캡처 단계)로 등록하는 이유: 표의 <tr> 에 상세화면으로 이동하는
+//   onclick 이 달려 있습니다. 거품 단계로 등록하면 행 이동이 먼저 일어나
+//   삭제 모달이 뜨지 않습니다. 캡처 단계가 먼저 실행되므로 여기서 멈춥니다.
+document.getElementById('dealsBody').addEventListener('click', function (e) {
+  const btn = e.target.closest('.js-delete-deal');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openDeleteModal(btn.dataset.id, btn.dataset.name);
+}, true);
 
 // 이벤트
 ['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {

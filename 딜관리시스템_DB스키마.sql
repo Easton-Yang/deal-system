@@ -113,61 +113,113 @@ CREATE TRIGGER deals_set_updated_at
 
 
 -- ──────────────────────────────────────────────────────────────
--- 6. Row Level Security (RLS) 설정
+-- 6. Row Level Security (RLS) 설정  ★ 기본값: 잠김
 -- ──────────────────────────────────────────────────────────────
--- [주의] 초기 개발·테스트 단계에서는 RLS를 비활성화합니다.
--- 운영 배포 전 반드시 아래 RLS 정책을 적용하고 Supabase Auth 연동을 완료하세요.
+-- [2026-10-01 변경] 이전 버전은 RLS를 '비활성화'로 두고 잠금 정책을
+-- 주석 처리해 두었습니다. 그 상태로 배포하면 API 주소와 anon key만
+-- 알면 누구나 딜 데이터를 조회·수정·삭제할 수 있습니다.
+-- (운영 전에 풀라는 주석만으로는 실제로 풀리지 않았습니다.)
+-- 그래서 '잠긴 상태'를 기본값으로 바꿨습니다.
+--
+-- 역할 이름의 뜻
+--   anon          = 로그인하지 않은 요청 (API 주소만 알면 누구나)
+--   authenticated = Supabase Auth 로그인에 성공한 요청
+--
+-- 아래 권한은 화면이 실제로 수행하는 동작과 정확히 일치시켰습니다.
+--   deals                조회·추가·수정·삭제
+--   deal_stage_history   조회·추가            (이력이므로 수정·삭제 없음)
+--   deal_notes           조회·추가·삭제        (수정 기능 없음)
+--   deal_files           조회·추가·삭제        (수정 기능 없음)
+-- 딜을 삭제하면 하위 메모·이력·첨부는 외래키 ON DELETE CASCADE가 처리하며,
+-- 이 동작은 참조 무결성 작업이라 RLS와 권한 검사를 거치지 않습니다.
+-- 따라서 하위 테이블에 추가 권한을 줄 필요가 없습니다.
 
--- 개발 단계: RLS 비활성화 (모든 인증 사용자 접근 허용)
-ALTER TABLE deals             DISABLE ROW LEVEL SECURITY;
-ALTER TABLE deal_stage_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE deal_notes        DISABLE ROW LEVEL SECURITY;
-ALTER TABLE deal_files        DISABLE ROW LEVEL SECURITY;
-
--- ── 운영 배포 시 아래 주석 해제 ──────────────────────────────
-/*
 -- RLS 활성화
 ALTER TABLE deals              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_stage_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_notes         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_files         ENABLE ROW LEVEL SECURITY;
 
--- 인증된 사용자는 전체 조회 가능
-CREATE POLICY "authenticated_select_deals"
-  ON deals FOR SELECT TO authenticated USING (true);
+-- 다시 실행해도 오류가 나지 않도록 같은 이름의 정책을 먼저 제거
+DROP POLICY IF EXISTS "deals_select_auth"   ON deals;
+DROP POLICY IF EXISTS "deals_insert_auth"   ON deals;
+DROP POLICY IF EXISTS "deals_update_auth"   ON deals;
+DROP POLICY IF EXISTS "deals_delete_auth"   ON deals;
+DROP POLICY IF EXISTS "history_select_auth" ON deal_stage_history;
+DROP POLICY IF EXISTS "history_insert_auth" ON deal_stage_history;
+DROP POLICY IF EXISTS "notes_select_auth"   ON deal_notes;
+DROP POLICY IF EXISTS "notes_insert_auth"   ON deal_notes;
+DROP POLICY IF EXISTS "notes_delete_auth"   ON deal_notes;
+DROP POLICY IF EXISTS "files_select_auth"   ON deal_files;
+DROP POLICY IF EXISTS "files_insert_auth"   ON deal_files;
+DROP POLICY IF EXISTS "files_delete_auth"   ON deal_files;
 
-CREATE POLICY "authenticated_select_history"
-  ON deal_stage_history FOR SELECT TO authenticated USING (true);
+-- deals
+CREATE POLICY "deals_select_auth" ON deals
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "deals_insert_auth" ON deals
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "deals_update_auth" ON deals
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "deals_delete_auth" ON deals
+  FOR DELETE TO authenticated USING (true);
 
-CREATE POLICY "authenticated_select_notes"
-  ON deal_notes FOR SELECT TO authenticated USING (true);
+-- deal_stage_history (단계 이력 — 기록이므로 수정·삭제 정책을 두지 않습니다)
+CREATE POLICY "history_select_auth" ON deal_stage_history
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "history_insert_auth" ON deal_stage_history
+  FOR INSERT TO authenticated WITH CHECK (true);
 
-CREATE POLICY "authenticated_select_files"
-  ON deal_files FOR SELECT TO authenticated USING (true);
+-- deal_notes (메모)
+CREATE POLICY "notes_select_auth" ON deal_notes
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "notes_insert_auth" ON deal_notes
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "notes_delete_auth" ON deal_notes
+  FOR DELETE TO authenticated USING (true);
 
--- 인증된 사용자는 삽입 가능
-CREATE POLICY "authenticated_insert_deals"
-  ON deals FOR INSERT TO authenticated WITH CHECK (true);
+-- deal_files (첨부파일 목록)
+CREATE POLICY "files_select_auth" ON deal_files
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "files_insert_auth" ON deal_files
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "files_delete_auth" ON deal_files
+  FOR DELETE TO authenticated USING (true);
 
-CREATE POLICY "authenticated_insert_history"
-  ON deal_stage_history FOR INSERT TO authenticated WITH CHECK (true);
+-- 비로그인(anon) 권한 회수 — RLS와 두 겹으로 막습니다
+REVOKE ALL ON deals              FROM anon;
+REVOKE ALL ON deal_stage_history FROM anon;
+REVOKE ALL ON deal_notes         FROM anon;
+REVOKE ALL ON deal_files         FROM anon;
 
-CREATE POLICY "authenticated_insert_notes"
-  ON deal_notes FOR INSERT TO authenticated WITH CHECK (true);
+-- 로그인 사용자에게 필요한 권한만 명시적으로 부여
+GRANT SELECT, INSERT, UPDATE, DELETE ON deals              TO authenticated;
+GRANT SELECT, INSERT                 ON deal_stage_history TO authenticated;
+GRANT SELECT, INSERT, DELETE         ON deal_notes         TO authenticated;
+GRANT SELECT, INSERT, DELETE         ON deal_files         TO authenticated;
 
-CREATE POLICY "authenticated_insert_files"
-  ON deal_files FOR INSERT TO authenticated WITH CHECK (true);
+-- ── 역할 구분(팀장만 수정·삭제)이 필요해지면 ────────────────
+-- 현재는 로그인한 팀원 4명이 모든 딜을 조회·수정할 수 있습니다.
+-- 팀장만 삭제 가능하게 하려면, Supabase Auth 사용자의
+-- user_metadata 에 role 을 넣고 아래처럼 조건을 바꾸면 됩니다.
+--
+--   DROP POLICY "deals_delete_auth" ON deals;
+--   CREATE POLICY "deals_delete_admin" ON deals
+--     FOR DELETE TO authenticated
+--     USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+--
+-- ※ 담당자 본인 딜만 수정하게 제한하려면 deals.assigned_to 를
+--   로그인 아이디와 비교해야 하므로, assigned_to 표기를
+--   계정 아이디와 일치시켜야 합니다(01_src/js/config.js 주석 참고).
 
--- 수정: 팀장(admin) 역할은 전체, 일반 사용자는 담당 딜만
--- (Supabase Auth custom claims 또는 별도 users 테이블로 역할 관리 필요)
-CREATE POLICY "authenticated_update_deals"
-  ON deals FOR UPDATE TO authenticated USING (true);
-
--- 삭제: 팀장만 (별도 역할 관리 후 조건 수정)
-CREATE POLICY "authenticated_delete_deals"
-  ON deals FOR DELETE TO authenticated USING (true);
+-- ── 개발·테스트 중 일시적으로 풀어야 할 때만 ────────────────
+-- ※ 풀린 동안은 누구나 접근 가능합니다. 반드시 되돌리세요.
+/*
+ALTER TABLE deals              DISABLE ROW LEVEL SECURITY;
+ALTER TABLE deal_stage_history DISABLE ROW LEVEL SECURITY;
+ALTER TABLE deal_notes         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE deal_files         DISABLE ROW LEVEL SECURITY;
 */
-
 
 -- ──────────────────────────────────────────────────────────────
 -- 7. Supabase Storage 버킷 생성

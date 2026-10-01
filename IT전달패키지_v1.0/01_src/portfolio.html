@@ -167,12 +167,12 @@ function renderTimelineCard(item) {
     <div class="tl-card" onclick="location.href='deal-detail.html?id=${deal.id}'" title="클릭하여 딜 상세 보기">
       <div class="tl-card-header">
         <div class="tl-card-left">
-          <div class="tl-deal-name">${deal.deal_name}</div>
+          <div class="tl-deal-name">${escapeHtml(deal.deal_name)}</div>
           <div class="tl-deal-meta">
             ${assetBadge(deal.asset_class)}
             ${stageBadge(deal.current_stage)}
             ${deal.final_result ? resultBadge(deal.final_result) : ''}
-            <span class="text-muted ms-1"><i class="fas fa-user me-1"></i>${deal.assigned_to}</span>
+            <span class="text-muted ms-1"><i class="fas fa-user me-1"></i>${escapeHtml(deal.assigned_to)}</span>
             ${deal.deal_size ? `<span class="text-muted"><i class="fas fa-won-sign me-1"></i>${formatCurrency(deal.deal_size)}</span>` : ''}
             <span class="text-muted"><i class="fas fa-calendar me-1"></i>인입 ${intakeDate}</span>
           </div>

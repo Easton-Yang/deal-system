@@ -75,7 +75,8 @@ async function addNote() {
   const text = ta.value.trim();
   if (!text) { showToast('메모 내용을 입력하세요.', 'warning'); return; }
   try {
-    await createNote(dealId, text, CURRENT_USER);
+    const user = getCurrentUser();
+    await createNote(dealId, text, user.username);
     ta.value = '';
     showToast('메모가 저장되었습니다.', 'success');
     await renderNotes();
@@ -107,11 +108,11 @@ async function renderNotes() {
     <div class="timeline-item">
       <div class="timeline-dot"></div>
       <div class="d-flex justify-content-between align-items-center">
-        <span class="timeline-author"><i class="fas fa-user-circle me-1"></i>${n.author}</span>
+        <span class="timeline-author"><i class="fas fa-user-circle me-1"></i>${escapeHtml(n.author)}</span>
         <span class="timeline-date">${formatDateTime(n.created_at)}</span>
       </div>
       <div class="timeline-body">
-        ${n.note_text.replace(/\n/g,'<br>')}
+        ${escapeHtml(n.note_text).replace(/\n/g,'<br>')}
         <div class="text-end mt-2">
           <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteNoteUI('${n.id}')">
             <i class="fas fa-trash-alt"></i> 삭제
@@ -136,7 +137,7 @@ async function renderStageHistory() {
       <div class="timeline-dot" style="background:#1976d2"></div>
       <div class="d-flex justify-content-between">
         <span>${stageBadge(h.stage)}</span>
-        <span class="timeline-date">${formatDateTime(h.changed_at)}${h.changed_by ? ' · ' + h.changed_by : ''}</span>
+        <span class="timeline-date">${formatDateTime(h.changed_at)}${h.changed_by ? ' · ' + escapeHtml(h.changed_by) : ''}</span>
       </div>
     </div>`).join('') + `</div>`;
 }
@@ -196,6 +197,21 @@ async function renderFiles() {
   const files = await getFiles(dealId);
   const container = document.getElementById('filesContainer');
   if (!container) return;
+
+  // 파일 삭제 버튼 (이벤트 위임) — 한 번만 연결합니다.
+  // 예전에는 버튼의 onclick 속성에 파일 경로를 문자열로 끼워 넣었습니다.
+  // 경로에는 원본 파일명이 들어 있어서, 파일명에 따옴표가 있으면
+  // 속성을 벗어나 임의 코드가 실행될 수 있었습니다.
+  if (!container.dataset.delegated) {
+    container.addEventListener('click', function (e) {
+      const btn = e.target.closest('.js-delete-file');
+      if (!btn) return;
+      e.preventDefault();
+      deleteFileUI(btn.dataset.id, btn.dataset.path);
+    });
+    container.dataset.delegated = '1';
+  }
+
   if (files.length === 0) {
     container.innerHTML = '<p class="text-muted" style="font-size:13px">첨부된 파일이 없습니다.</p>';
     return;
@@ -204,10 +220,11 @@ async function renderFiles() {
     <div class="file-item">
       <i class="fas ${fileIcon(f.file_name)} file-icon fa-lg"></i>
       <div class="flex-grow-1 min-width-0">
-        <div class="file-name">${f.file_name}</div>
-        <div class="file-meta">${fileSize(f.file_size)}${f.uploaded_by ? ' · ' + f.uploaded_by : ''} · ${formatDateTime(f.uploaded_at)}</div>
+        <div class="file-name">${escapeHtml(f.file_name)}</div>
+        <div class="file-meta">${fileSize(f.file_size)}${f.uploaded_by ? ' · ' + escapeHtml(f.uploaded_by) : ''} · ${formatDateTime(f.uploaded_at)}</div>
       </div>
-      <button class="btn btn-sm btn-outline-danger" onclick="deleteFileUI('${f.id}','${f.file_path||''}')">
+      <button type="button" class="btn btn-sm btn-outline-danger js-delete-file"
+        data-id="${escapeHtml(f.id)}" data-path="${escapeHtml(f.file_path||'')}">
         <i class="fas fa-trash"></i>
       </button>
     </div>`).join('');
@@ -233,9 +250,9 @@ function renderEditForm() {
   const editSection = document.getElementById('editSection');
   if (!editSection) return;
 
-  const assetOptions = ASSET_CLASSES.map(a => `<option value="${a}" ${deal.asset_class===a?'selected':''}>${a}</option>`).join('');
-  const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${c}" ${deal.intake_channel===c?'selected':''}>${c}</option>`).join('');
-  const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${m}" ${deal.assigned_to===m?'selected':''}>${m}</option>`).join('');
+  const assetOptions = ASSET_CLASSES.map(a => `<option value="${escapeHtml(a)}" ${deal.asset_class===a?'selected':''}>${escapeHtml(a)}</option>`).join('');
+  const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${escapeHtml(c)}" ${deal.intake_channel===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${escapeHtml(m)}" ${deal.assigned_to===m?'selected':''}>${escapeHtml(m)}</option>`).join('');
   const resultOptions = ['','투자','패스','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
 
   editSection.innerHTML = `
@@ -245,7 +262,7 @@ function renderEditForm() {
         <div class="row g-3">
           <div class="col-12">
             <label class="form-label">딜명 <span class="required-star">*</span></label>
-            <input type="text" id="e_name" class="form-control" value="${deal.deal_name}">
+            <input type="text" id="e_name" class="form-control" value="${escapeHtml(deal.deal_name)}">
           </div>
           <div class="col-md-4">
             <label class="form-label">자산군</label>
@@ -257,7 +274,7 @@ function renderEditForm() {
           </div>
           <div class="col-md-4">
             <label class="form-label">인입일자</label>
-            <input type="date" id="e_date" class="form-control" value="${deal.intake_date||''}">
+            <input type="date" id="e_date" class="form-control" value="${escapeHtml(deal.intake_date||'')}">
           </div>
           <div class="col-md-4">
             <label class="form-label">담당자</label>
@@ -265,15 +282,15 @@ function renderEditForm() {
           </div>
           <div class="col-md-4">
             <label class="form-label">딜 규모 (원)</label>
-            <input type="number" id="e_size" class="form-control" value="${deal.deal_size||''}">
+            <input type="number" id="e_size" class="form-control" value="${escapeHtml(deal.deal_size||'')}">
           </div>
           <div class="col-md-4">
             <label class="form-label">소개자/GP명</label>
-            <input type="text" id="e_gp" class="form-control" value="${deal.introducer_gp||''}">
+            <input type="text" id="e_gp" class="form-control" value="${escapeHtml(deal.introducer_gp||'')}">
           </div>
           <div class="col-md-6">
             <label class="form-label">1차 의견</label>
-            <textarea id="e_opinion" class="form-control" rows="3">${deal.first_opinion||''}</textarea>
+            <textarea id="e_opinion" class="form-control" rows="3">${escapeHtml(deal.first_opinion||'')}</textarea>
           </div>
           <div class="col-md-6">
             <label class="form-label">최종 결과</label>
@@ -336,7 +353,7 @@ function render() {
   if (!deal) return;
 
   document.getElementById('pageTitle').innerHTML =
-    `<i class="fas fa-file-alt me-2" style="color:#1a237e"></i>${deal.deal_name}`;
+    `<i class="fas fa-file-alt me-2" style="color:#1a237e"></i>${escapeHtml(deal.deal_name)}`;
   document.getElementById('pageSub').innerHTML =
     `${assetBadge(deal.asset_class)} &nbsp;${stageBadge(deal.current_stage)}
      ${deal.final_result ? '&nbsp;' + resultBadge(deal.final_result) : ''}
@@ -366,13 +383,13 @@ function render() {
             <div class="row">
               <div class="col-md-6">
                 <div class="info-row"><div class="info-label">자산군</div><div class="info-value">${assetBadge(deal.asset_class)}</div></div>
-                <div class="info-row"><div class="info-label">인입경로</div><div class="info-value">${deal.intake_channel}</div></div>
+                <div class="info-row"><div class="info-label">인입경로</div><div class="info-value">${escapeHtml(deal.intake_channel)}</div></div>
                 <div class="info-row"><div class="info-label">인입일자</div><div class="info-value">${formatDate(deal.intake_date)}</div></div>
-                <div class="info-row"><div class="info-label">담당자</div><div class="info-value"><strong>${deal.assigned_to}</strong></div></div>
+                <div class="info-row"><div class="info-label">담당자</div><div class="info-value"><strong>${escapeHtml(deal.assigned_to)}</strong></div></div>
               </div>
               <div class="col-md-6">
                 <div class="info-row"><div class="info-label">딜 규모</div><div class="info-value"><strong>${formatCurrency(deal.deal_size)}</strong></div></div>
-                <div class="info-row"><div class="info-label">소개자/GP</div><div class="info-value">${deal.introducer_gp || '-'}</div></div>
+                <div class="info-row"><div class="info-label">소개자/GP</div><div class="info-value">${escapeHtml(deal.introducer_gp || '-')}</div></div>
                 <div class="info-row"><div class="info-label">최종결과</div><div class="info-value">${resultBadge(deal.final_result) || '<span class="text-muted">미정</span>'}</div></div>
                 <div class="info-row"><div class="info-label">최종수정</div><div class="info-value text-muted">${formatDateTime(deal.updated_at)}</div></div>
               </div>
@@ -381,7 +398,7 @@ function render() {
             <hr>
             <div class="info-row">
               <div class="info-label">1차 의견</div>
-              <div class="info-value">${deal.first_opinion.replace(/\n/g,'<br>')}</div>
+              <div class="info-value">${escapeHtml(deal.first_opinion).replace(/\n/g,'<br>')}</div>
             </div>` : ''}
           </div>
         </div>
@@ -394,7 +411,7 @@ function render() {
               <textarea id="newNoteText" class="form-control" rows="3"
                 placeholder="검토 의견, 회의 결과, 특이사항 등을 기록하세요..."></textarea>
               <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="text-muted" style="font-size:12px">작성자: <strong>${CURRENT_USER}</strong></span>
+                <span class="text-muted" style="font-size:12px">작성자: <strong>${escapeHtml(currentUserName())}</strong></span>
                 <button class="btn btn-primary btn-sm" onclick="addNote()">
                   <i class="fas fa-plus me-1"></i>메모 추가
                 </button>

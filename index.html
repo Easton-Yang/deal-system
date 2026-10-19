@@ -67,16 +67,22 @@
 
     <!-- 다음 액션 현황 -->
     <div class="row g-3 mb-4">
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="card h-100">
           <div class="card-header"><i class="fas fa-user-clock me-2"></i>내가 처리할 딜</div>
           <div class="card-body p-0"><div id="myActionList"></div></div>
         </div>
       </div>
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="card h-100">
           <div class="card-header"><i class="fas fa-exclamation-circle me-2"></i>기한 임박·초과 (7일 이내)</div>
           <div class="card-body p-0"><div id="dueSoonList"></div></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-header"><i class="fas fa-pause-circle me-2"></i>보류·외부회신 대기</div>
+          <div class="card-body p-0"><div id="stalledList"></div></div>
         </div>
       </div>
     </div>
@@ -193,6 +199,21 @@
     .filter(d => d.next_action && d.next_action_due && daysUntil(d.next_action_due) <= 7)
     .sort((a, b) => a.next_action_due.localeCompare(b.next_action_due));
   renderActionList('dueSoonList', dueSoon, '임박하거나 지난 기한이 없습니다.');
+
+  const stalled = deals.filter(d => ['보류', '외부회신 대기'].includes(dealStatus(d)));
+  const stalledEl = document.getElementById('stalledList');
+  if (stalled.length === 0) {
+    stalledEl.innerHTML = `<p class="text-muted text-center py-4 mb-0" style="font-size:13px">보류·대기 중인 딜이 없습니다.</p>`;
+  } else {
+    stalledEl.innerHTML = stalled.slice(0, 8).map(d => `
+      <div class="action-row" onclick="location.href='deal-detail.html?id=${d.id}'">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong style="font-size:13px">${escapeHtml(d.deal_name)}</strong>
+          ${statusBadge(dealStatus(d))}
+        </div>
+        <div class="text-muted" style="font-size:12px">${stageBadge(d.current_stage)}${d.next_action_note ? ' · ' + escapeHtml(d.next_action_note) : ''}</div>
+      </div>`).join('');
+  }
 
   // 자산군 도넛 차트
   const assetCount = {};

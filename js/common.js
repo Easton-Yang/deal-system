@@ -9,6 +9,9 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-4.0  2026-10-19  딜 "단계"와 별개로 "상태"(진행/외부회신 대기/보류/종결)
+//                         추가. 상세·목록·칸반·대시보드 반영. deals 테이블
+//                         컬럼 추가라 앞자리 올림
 //   Beta-3.0  2026-10-19  딜별 "다음 액션·기한" 추가(담당자/기한/대기사유),
 //                         대시보드에 '내가 처리할 딜'·'기한 임박·초과' 추가.
 //                         deals 테이블 컬럼 4개 추가라 앞자리 올림
@@ -17,7 +20,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-3.0';
+const APP_VERSION = 'Beta-4.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -28,6 +31,18 @@ const ASSET_CLASSES = ['PE/VC', '부동산', '인프라', '사모크레딧',
 const INTAKE_CHANNELS = ['이메일', '카카오톡', '텔레그램', '기타'];
 const FINAL_RESULTS = ['투자', '패스', '보류'];
 const UNASSIGNED = '미배정';   // 담당자 미지정 딜 (엑셀 이관분 등)
+
+// 검토 상태: 단계(STAGES)와 별개로, 실제로 움직이고 있는지를 나타냅니다.
+// 오래된 딜이 단계만으로는 '지금 멈춰 있는지' 구분되지 않는 문제를 막기 위함.
+const REVIEW_STATUSES = ['진행', '외부회신 대기', '보류', '종결'];
+const DEFAULT_REVIEW_STATUS = '진행';
+
+const REVIEW_STATUS_BADGE = {
+  '진행':        'bg-light text-dark border',
+  '외부회신 대기': 'bg-warning text-dark',
+  '보류':        'bg-secondary',
+  '종결':        'bg-dark'
+};
 
 const STAGE_BADGE = {
   '접수':    'bg-secondary',
@@ -136,7 +151,7 @@ async function getDeal(id) {
 async function createDeal(data) {
   if (DEMO_MODE) {
     const deals = demoGet('deals_v3');
-    const newDeal = { ...data, id: demoId(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newDeal = { review_status: DEFAULT_REVIEW_STATUS, ...data, id: demoId(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     deals.unshift(newDeal);
     demoSet('deals_v3', deals);
     await addStageHistory(newDeal.id, newDeal.current_stage || '접수', currentUserName());
@@ -364,6 +379,21 @@ function resultBadge(result) {
   if (!result) return '';
   const cls = RESULT_BADGE[result] || 'bg-secondary';
   return `<span class="badge ${cls}">${result}</span>`;
+}
+
+// review_status 가 없는 딜(이 기능 이전에 만들어진 데모 데이터 등)은
+// '진행'으로 간주합니다. 라이브 DB는 컬럼에 NOT NULL DEFAULT 가 있어
+// 항상 값이 채워져 있지만, 데모 모드(localStorage)는 그렇지 않을 수 있습니다.
+function dealStatus(deal) {
+  return (deal && deal.review_status) || DEFAULT_REVIEW_STATUS;
+}
+
+// review_status 는 드롭다운으로만 고르고 DB 제약으로도 막혀 있어 고정값만
+// 들어옵니다(stageBadge 와 같은 이유로 자유 입력이 아니라 escape 불필요).
+function statusBadge(status) {
+  const s = status || DEFAULT_REVIEW_STATUS;
+  const cls = REVIEW_STATUS_BADGE[s] || 'bg-secondary';
+  return `<span class="badge ${cls}">${s}</span>`;
 }
 
 function showToast(message, type = 'success') {

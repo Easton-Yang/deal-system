@@ -52,6 +52,17 @@ if (!dealId) { window.location.href = 'deals.html'; }
 
 // ── 단계 진행 ──────────────────────────────────────────────────
 
+async function changeStatusUI(newStatus) {
+  if (newStatus === dealStatus(deal)) return;
+  try {
+    deal = await updateDeal(dealId, { review_status: newStatus });
+    showToast(`상태가 "${newStatus}"(으)로 변경되었습니다.`, 'success');
+    render();
+  } catch(e) {
+    showToast('상태 변경 실패: ' + e.message, 'danger');
+  }
+}
+
 async function changeStageUI(newStage) {
   if (newStage === deal.current_stage) return;
   const label = newStage === '패스'
@@ -412,16 +423,24 @@ function render() {
   document.getElementById('pageTitle').innerHTML =
     `<i class="fas fa-file-alt me-2" style="color:#1a237e"></i>${escapeHtml(deal.deal_name)}`;
   document.getElementById('pageSub').innerHTML =
-    `${assetBadge(deal.asset_class)} &nbsp;${stageBadge(deal.current_stage)}
+    `${assetBadge(deal.asset_class)} &nbsp;${stageBadge(deal.current_stage)} &nbsp;${statusBadge(dealStatus(deal))}
      ${deal.final_result ? '&nbsp;' + resultBadge(deal.final_result) : ''}
      &nbsp;<span class="text-muted" style="font-size:12px">등록: ${formatDateTime(deal.created_at)}</span>`;
 
   document.getElementById('mainContent').innerHTML = `
     <!-- 단계 진행 -->
     <div class="detail-section mb-3">
-      <div class="detail-section-header">
-        <i class="fas fa-route" style="color:#1a237e"></i> 검토 단계
-        <span class="text-muted" style="font-size:12px;font-weight:400;margin-left:8px">클릭하여 단계 변경</span>
+      <div class="detail-section-header d-flex justify-content-between align-items-center">
+        <div>
+          <i class="fas fa-route" style="color:#1a237e"></i> 검토 단계
+          <span class="text-muted" style="font-size:12px;font-weight:400;margin-left:8px">클릭하여 단계 변경</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-muted" style="font-size:12px;font-weight:400">상태</span>
+          <select class="form-select form-select-sm" style="width:150px" onchange="changeStatusUI(this.value)">
+            ${REVIEW_STATUSES.map(s => `<option value="${s}" ${dealStatus(deal)===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div class="detail-section-body">${stageProgressHTML(deal.current_stage)}</div>
     </div>

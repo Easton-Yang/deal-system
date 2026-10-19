@@ -51,6 +51,9 @@
       <select id="filterAssignee" class="form-select" style="width:110px">
         <option value="">담당자 전체</option>
       </select>
+      <select id="filterStatus" class="form-select" style="width:130px">
+        <option value="">상태 전체</option>
+      </select>
       <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">
         <i class="fas fa-undo me-1"></i>초기화
       </button>
@@ -71,6 +74,7 @@
                   <th>담당자</th>
                   <th>딜 규모</th>
                   <th>현재 단계</th>
+                  <th>상태</th>
                   <th>다음 액션</th>
                   <th>최종결과</th>
                   <th style="width:60px"></th>
@@ -160,10 +164,14 @@ function buildFilters() {
   [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
     const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
   });
+  const statusSel = document.getElementById('filterStatus');
+  REVIEW_STATUSES.forEach(s => {
+    const o = document.createElement('option'); o.value = o.textContent = s; statusSel.appendChild(o);
+  });
 }
 
 function resetFilters() {
-  ['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+  ['filterSearch','filterAsset','filterStage','filterAssignee','filterStatus'].forEach(id => {
     const el = document.getElementById(id);
     el.tagName === 'INPUT' ? (el.value = '') : (el.value = '');
   });
@@ -175,11 +183,13 @@ function filterDeals() {
   const asset = document.getElementById('filterAsset').value;
   const stage = document.getElementById('filterStage').value;
   const who   = document.getElementById('filterAssignee').value;
+  const status = document.getElementById('filterStatus').value;
   return allDeals.filter(d =>
-    (!q     || d.deal_name.toLowerCase().includes(q) || (d.introducer_gp||'').toLowerCase().includes(q)) &&
-    (!asset || d.asset_class === asset) &&
-    (!stage || d.current_stage === stage) &&
-    (!who   || d.assigned_to === who)
+    (!q      || d.deal_name.toLowerCase().includes(q) || (d.introducer_gp||'').toLowerCase().includes(q)) &&
+    (!asset  || d.asset_class === asset) &&
+    (!stage  || d.current_stage === stage) &&
+    (!who    || d.assigned_to === who) &&
+    (!status || dealStatus(d) === status)
   );
 }
 
@@ -213,6 +223,7 @@ function renderTable(deals) {
       <td>${escapeHtml(d.assigned_to)}</td>
       <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
       <td>${stageBadge(d.current_stage)}</td>
+      <td>${statusBadge(dealStatus(d))}</td>
       <td>${nextActionSummaryHTML(d)}</td>
       <td>${resultBadge(d.final_result)}</td>
       <td>
@@ -248,7 +259,7 @@ function kanbanCardHTML(d) {
       ondragend="onDragEnd(event)"
       onclick="location.href='deal-detail.html?id=${d.id}'">
       <div class="kc-name">${escapeHtml(d.deal_name)}</div>
-      <div class="kc-badges">${assetBadge(d.asset_class)}</div>
+      <div class="kc-badges">${assetBadge(d.asset_class)}${dealStatus(d) !== DEFAULT_REVIEW_STATUS ? ' ' + statusBadge(dealStatus(d)) : ''}</div>
       <div class="kc-meta">
         <span><i class="fas fa-user me-1"></i>${escapeHtml(d.assigned_to)}</span>
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
@@ -370,6 +381,7 @@ function loadUrlParams() {
   if (p.get('stage'))       document.getElementById('filterStage').value    = p.get('stage');
   if (p.get('asset_class')) document.getElementById('filterAsset').value    = p.get('asset_class');
   if (p.get('assigned_to')) document.getElementById('filterAssignee').value = p.get('assigned_to');
+  if (p.get('status'))      document.getElementById('filterStatus').value   = p.get('status');
   if (p.get('view') === 'kanban') setView('kanban');
 }
 
@@ -390,7 +402,7 @@ document.getElementById('dealsBody').addEventListener('click', function (e) {
 }, true);
 
 // 이벤트
-['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+['filterSearch','filterAsset','filterStage','filterAssignee','filterStatus'].forEach(id => {
   document.getElementById(id).addEventListener('input', applyFilters);
   document.getElementById(id).addEventListener('change', applyFilters);
 });

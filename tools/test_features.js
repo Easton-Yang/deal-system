@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * 담당자 일괄 변경 기능 테스트 (실제 브라우저)
+ * 기능 테스트 (실제 브라우저)
+ *   - 담당자 일괄 변경
+ *   - 첨부파일 다운로드 버튼
+ *   - 단계 변경 시 이력 기록
  *
  * 쓰는 법 (프로젝트 폴더에서):
- *     node tools/test_bulk_assign.js
+ *     node tools/test_features.js
  *
  * 필요한 것: Node.js + Playwright
  *     npm i -D playwright && npx playwright install chromium
@@ -199,12 +202,59 @@ function serve(dir, port) {
     check('행 본문 클릭 → 상세화면 이동', pageOf(page.url()) === 'deal-detail.html',
           '머문 주소: ' + pageOf(page.url()));
 
-    console.log('\n[9] 칸반 뷰');
+    console.log('\n[9] 첨부파일 다운로드 버튼');
+    await page.evaluate(() => {
+      // 저장 경로가 있는 파일 1건 + 없는 파일 1건 (데모 모드는 경로가 null)
+      localStorage.setItem('files_v3', JSON.stringify([
+        { id: 'f1', deal_id: 'd2', file_name: '제안서 최종.pdf', file_size: 204800,
+          uploaded_by: 'tester', uploaded_at: '2026-10-01T00:00:00Z',
+          file_path: 'd2/1730000000_a1b2c3.pdf' },
+        { id: 'f2', deal_id: 'd2', file_name: '경로없음.xlsx', file_size: 1024,
+          uploaded_by: 'tester', uploaded_at: '2026-10-01T00:00:00Z', file_path: null }
+      ]));
+    });
+    await page.goto(BASE + '/deal-detail.html?id=d2');
+    await sleep(1500);
+
+    check('첨부 2건 표시', await page.locator('.file-item').count() === 2);
+    check('경로가 있는 파일 → 다운로드 버튼 활성',
+          await page.locator('.js-download-file').count() === 1);
+    check('경로가 없는 파일 → 다운로드 버튼 비활성',
+          await page.locator('.file-item button[disabled]').count() === 1);
+    check('파일명이 글자 그대로 표시됨',
+          (await page.locator('.file-name').first().textContent()).trim() === '제안서 최종.pdf');
+
+    // 데모 모드에서는 실제 파일이 없으므로 안내가 떠야 합니다 (조용히 실패하면 안 됨)
+    await page.click('.js-download-file');
+    await sleep(900);
+    const toast = await page.evaluate(() => {
+      const t = document.getElementById('_toast');
+      return t ? t.textContent : null;
+    });
+    check('데모 모드 다운로드 → 이유를 알려주는 안내 표시',
+          !!toast && toast.includes('데모 모드'), '토스트: ' + toast);
+    check('다운로드 버튼이 다시 눌릴 수 있는 상태로 복구',
+          await page.evaluate(() => !document.querySelector('.js-download-file').disabled));
+
+    console.log('\n[10] 단계 변경 시 이력이 기록되는가');
+    await page.evaluate(() => localStorage.setItem('stage_history_v3', '[]'));
+    await page.goto(BASE + '/deal-detail.html?id=d2');
+    await sleep(1500);
+    await page.evaluate(() => changeStageUI('심층검토'));
+    await sleep(1200);
+    const hist = await page.evaluate(() => JSON.parse(localStorage.getItem('stage_history_v3')));
+    check('이력 1건 기록됨', hist.length === 1, JSON.stringify(hist));
+    check('기록된 단계가 심층검토', hist.length === 1 && hist[0].stage === '심층검토');
+    const deals2 = await page.evaluate(() => JSON.parse(localStorage.getItem('deals_v3')));
+    check('딜의 현재 단계도 바뀜',
+          (deals2.find(d => d.id === 'd2') || {}).current_stage === '심층검토');
+
+    console.log('\n[11] 칸반 뷰');
     await page.goto(BASE + '/deals.html?view=kanban');
     await page.waitForSelector('.kanban-card', { timeout: 15000 });
     check('칸반에서 바 숨김', await page.locator('#bulkBar').isHidden());
 
-    console.log('\n[10] 자바스크립트 오류');
+    console.log('\n[12] 자바스크립트 오류');
     check('오류 없음', errs.length === 0, errs.join(' | '));
   } finally {
     await b.close();

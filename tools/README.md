@@ -9,7 +9,7 @@
 | `check_xss.py` | 사용자 입력이 escape 없이 화면에 들어가는 곳을 전수 검사 | Python 3 |
 | `make_package.py` | IT 전달 패키지(`IT전달패키지_v1.0/01_src`) 재생성 + CDN 주소 치환 확인 | Python 3 |
 | `test_security.js` | 실제 브라우저로 XSS·로그인 차단 32개 항목 검사 | Node.js + Playwright |
-| `test_bulk_assign.js` | 담당자 일괄 변경 28개 항목 검사 (체크박스가 행 이동을 막는지 등) | Node.js + Playwright |
+| `test_features.js` | 기능 37개 항목 검사: 담당자 일괄 변경, 첨부 다운로드, 단계 이력 기록 | Node.js + Playwright |
 | `mac/upload_to_supabase.py` | `seed-data.js`의 딜 247건·단계이력을 Supabase로 일괄 업로드 | Python 3 + service_role 키 |
 | `mac/finish_security.sh` | **보안 마무리 한 번에**: 받은 코드 확인 → DB 잠금 판정 → 위험 파일 정리 → 남은 할 일 안내 | bash + curl (맥 기본) |
 
@@ -37,7 +37,7 @@ bash tools/mac/finish_security.sh
 ```bash
 python3 tools/check_xss.py        # escape 누락 0건이어야 합니다
 node    tools/test_security.js    # 32개 항목 전부 통과해야 합니다
-node    tools/test_bulk_assign.js # 28개 항목 전부 통과해야 합니다
+node    tools/test_features.js    # 37개 항목 전부 통과해야 합니다
 python3 tools/make_package.py     # 전달 패키지에 반영
 ```
 

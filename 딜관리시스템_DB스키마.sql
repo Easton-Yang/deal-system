@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS deals (
   next_action_due    DATE,                                     -- 다음 액션 기한 (NULL 허용)
   next_action_note   TEXT,                                     -- 대기 사유 등 메모 (NULL 허용)
   review_status      TEXT        NOT NULL DEFAULT '진행',      -- 검토 상태: 진행/외부회신 대기/보류/종결
+  pass_reason          TEXT,                                   -- 패스 사유 분류: 가격/구조/신용/한도/일정/기타 (NULL 허용)
+  pass_reason_note     TEXT,                                   -- 패스 사유 상세 메모 (NULL 허용)
+  reconsider_condition TEXT,                                   -- 재검토 조건 (NULL 허용)
   created_at      TIMESTAMPTZ DEFAULT NOW(),                   -- 최초 등록 일시
   updated_at      TIMESTAMPTZ DEFAULT NOW()                    -- 최종 수정 일시 (트리거로 자동 갱신)
 );
@@ -42,7 +45,9 @@ ALTER TABLE deals
   ADD CONSTRAINT chk_final_result
     CHECK (final_result IN ('투자','패스','보류') OR final_result IS NULL),
   ADD CONSTRAINT chk_review_status
-    CHECK (review_status IN ('진행','외부회신 대기','보류','종결'));
+    CHECK (review_status IN ('진행','외부회신 대기','보류','종결')),
+  ADD CONSTRAINT chk_pass_reason
+    CHECK (pass_reason IN ('가격','구조','신용','한도','일정','기타') OR pass_reason IS NULL);
 
 COMMENT ON TABLE deals IS '딜(투자건) 기본 정보 테이블';
 COMMENT ON COLUMN deals.deal_size IS '원 단위 정수. 예: 50억원 = 5000000000';
@@ -53,6 +58,9 @@ COMMENT ON COLUMN deals.next_action_owner IS '다음 액션을 수행할 담당�
 COMMENT ON COLUMN deals.next_action_due IS '다음 액션 기한. 2026-10 추가';
 COMMENT ON COLUMN deals.next_action_note IS '대기 사유 등 메모. 2026-10 추가';
 COMMENT ON COLUMN deals.review_status    IS '검토 상태: 진행/외부회신 대기/보류/종결. 2026-10 추가';
+COMMENT ON COLUMN deals.pass_reason         IS '패스 사유 분류. 2026-10 추가';
+COMMENT ON COLUMN deals.pass_reason_note     IS '패스 사유 상세 메모. 2026-10 추가';
+COMMENT ON COLUMN deals.reconsider_condition IS '재검토 조건(자유 입력). 2026-10 추가';
 
 
 -- ──────────────────────────────────────────────────────────────

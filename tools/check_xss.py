@@ -34,6 +34,7 @@ USER_FIELDS = [
     'file_path', 'full_name', 'username', 'email', 'intake_date', 'deal_size',
     'next_action', 'next_action_owner', 'next_action_due', 'next_action_note',
     'review_status',
+    'pass_reason', 'pass_reason_note', 'reconsider_condition',
 ]
 
 # 이미 안전한 처리를 거치는 형태

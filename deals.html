@@ -126,6 +126,40 @@
   </div>
 </div>
 
+<!-- 패스 사유 모달 -->
+<div class="modal fade" id="passReasonModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>패스 사유</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">사유 분류</label>
+          <select id="pr_reason" class="form-select">
+            <option value="">선택 안 함</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">상세 메모</label>
+          <textarea id="pr_note" class="form-control" rows="3" placeholder="패스 사유를 구체적으로 적어주세요..."></textarea>
+        </div>
+        <div>
+          <label class="form-label">재검토 조건 (선택)</label>
+          <textarea id="pr_condition" class="form-control" rows="2" placeholder="예: 가격을 10% 낮추면 재검토"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-danger" onclick="confirmPassReason()">
+          <i class="fas fa-ban me-1"></i> 패스로 처리
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
@@ -265,6 +299,7 @@ function kanbanCardHTML(d) {
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
       ${d.next_action ? `<div class="kc-next-action"><i class="fas fa-arrow-right me-1"></i>${escapeHtml(d.next_action)} · ${nextActionDueHTML(d.next_action_due)}</div>` : ''}
+      ${d.pass_reason ? `<div class="kc-next-action"><i class="fas fa-ban me-1"></i>패스 사유: ${escapeHtml(d.pass_reason)}</div>` : ''}
       ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
       ${d.final_result ? `<div class="mt-1">${resultBadge(d.final_result)}</div>` : ''}
     </div>`;
@@ -341,6 +376,8 @@ async function onDrop(e, newStage) {
   const deal = allDeals.find(d => d.id === dragSrcId);
   if (!deal || deal.current_stage === newStage) { dragSrcId = null; return; }
 
+  if (newStage === '패스') { openPassModal(dragSrcId); dragSrcId = null; return; }
+
   try {
     await changeStage(dragSrcId, newStage);
     deal.current_stage = newStage;
@@ -350,6 +387,50 @@ async function onDrop(e, newStage) {
     showToast('단계 변경 실패: ' + err.message, 'danger');
   }
   dragSrcId = null;
+}
+
+// ── 패스 사유 (칸반에서 '패스' 컬럼으로 드래그했을 때) ────────────
+
+let passReasonModal = null;
+let passTargetId = null;
+
+function openPassModal(dealId) {
+  passTargetId = dealId;
+  const deal = allDeals.find(d => d.id === dealId);
+  const sel = document.getElementById('pr_reason');
+  if (sel.options.length === 1) {
+    PASS_REASONS.forEach(r => {
+      const o = document.createElement('option'); o.value = o.textContent = r; sel.appendChild(o);
+    });
+  }
+  sel.value = deal.pass_reason || '';
+  document.getElementById('pr_note').value      = deal.pass_reason_note || '';
+  document.getElementById('pr_condition').value = deal.reconsider_condition || '';
+  if (!passReasonModal) passReasonModal = new bootstrap.Modal(document.getElementById('passReasonModal'));
+  passReasonModal.show();
+}
+
+async function confirmPassReason() {
+  if (!passTargetId) return;
+  const updated = {
+    current_stage:        '패스',
+    review_status:         '종결',
+    pass_reason:           document.getElementById('pr_reason').value || null,
+    pass_reason_note:      document.getElementById('pr_note').value.trim() || null,
+    reconsider_condition:  document.getElementById('pr_condition').value.trim() || null,
+  };
+  try {
+    const saved = await updateDeal(passTargetId, updated);
+    await addStageHistory(passTargetId, '패스', currentUserName());
+    const idx = allDeals.findIndex(d => d.id === passTargetId);
+    if (idx !== -1) allDeals[idx] = saved;
+    passReasonModal.hide();
+    showToast(`"${escapeHtml(saved.deal_name)}" → 패스`, 'success');
+    applyFilters();
+  } catch(e) {
+    showToast('처리 실패: ' + e.message, 'danger');
+  }
+  passTargetId = null;
 }
 
 // ── 삭제 ───────────────────────────────────────────────────────

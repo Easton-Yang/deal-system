@@ -38,6 +38,40 @@
   </div>
 </div>
 
+<!-- 패스 사유 모달 -->
+<div class="modal fade" id="passReasonModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>패스 사유</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">사유 분류</label>
+          <select id="pr_reason" class="form-select">
+            <option value="">선택 안 함</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">상세 메모</label>
+          <textarea id="pr_note" class="form-control" rows="3" placeholder="패스 사유를 구체적으로 적어주세요..."></textarea>
+        </div>
+        <div>
+          <label class="form-label">재검토 조건 (선택)</label>
+          <textarea id="pr_condition" class="form-control" rows="2" placeholder="예: 가격을 10% 낮추면 재검토"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-danger" onclick="confirmPassReason()">
+          <i class="fas fa-ban me-1"></i> 패스로 처리
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
@@ -65,10 +99,8 @@ async function changeStatusUI(newStatus) {
 
 async function changeStageUI(newStage) {
   if (newStage === deal.current_stage) return;
-  const label = newStage === '패스'
-    ? `정말 이 딜을 "패스"로 처리하시겠습니까?`
-    : `단계를 "${newStage}"(으)로 변경하시겠습니까?`;
-  if (!confirm(label)) return;
+  if (newStage === '패스') { openPassModal(); return; }
+  if (!confirm(`단계를 "${newStage}"(으)로 변경하시겠습니까?`)) return;
   try {
     await changeStage(dealId, newStage);
     deal.current_stage = newStage;
@@ -76,6 +108,45 @@ async function changeStageUI(newStage) {
     await load();
   } catch(e) {
     showToast('단계 변경 실패: ' + e.message, 'danger');
+  }
+}
+
+// ── 패스 사유 ──────────────────────────────────────────────────
+// 딜을 '패스'로 바꾸는 순간, 왜 패스했는지와 재검토 조건을 함께 기록합니다.
+// 나중에 같은 딜이 다시 들어왔을 때 과거 판단을 참고할 수 있게 하기 위함입니다.
+
+let passReasonModal = null;
+
+function openPassModal() {
+  const sel = document.getElementById('pr_reason');
+  if (sel.options.length === 1) {
+    PASS_REASONS.forEach(r => {
+      const o = document.createElement('option'); o.value = o.textContent = r; sel.appendChild(o);
+    });
+  }
+  document.getElementById('pr_reason').value    = deal.pass_reason || '';
+  document.getElementById('pr_note').value      = deal.pass_reason_note || '';
+  document.getElementById('pr_condition').value = deal.reconsider_condition || '';
+  if (!passReasonModal) passReasonModal = new bootstrap.Modal(document.getElementById('passReasonModal'));
+  passReasonModal.show();
+}
+
+async function confirmPassReason() {
+  const updated = {
+    current_stage:        '패스',
+    review_status:         '종결',
+    pass_reason:           document.getElementById('pr_reason').value || null,
+    pass_reason_note:      document.getElementById('pr_note').value.trim() || null,
+    reconsider_condition:  document.getElementById('pr_condition').value.trim() || null,
+  };
+  try {
+    deal = await updateDeal(dealId, updated);
+    await addStageHistory(dealId, '패스', currentUserName());
+    passReasonModal.hide();
+    showToast('딜이 "패스"로 처리되었습니다.', 'success');
+    await load();
+  } catch(e) {
+    showToast('처리 실패: ' + e.message, 'danger');
   }
 }
 
@@ -322,6 +393,7 @@ function renderEditForm() {
   const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${escapeHtml(c)}" ${deal.intake_channel===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
   const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${escapeHtml(m)}" ${deal.assigned_to===m?'selected':''}>${escapeHtml(m)}</option>`).join('');
   const resultOptions = ['','투자','패스','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
+  const passReasonOptions = ['', ...PASS_REASONS].map(r => `<option value="${r}" ${(deal.pass_reason||'')===r?'selected':''}>${r||'선택 안 함'}</option>`).join('');
 
   editSection.innerHTML = `
     <div class="detail-section mb-3">
@@ -364,6 +436,18 @@ function renderEditForm() {
             <label class="form-label">최종 결과</label>
             <select id="e_result" class="form-select">${resultOptions}</select>
           </div>
+          <div class="col-md-4">
+            <label class="form-label">패스 사유 분류</label>
+            <select id="e_pass_reason" class="form-select">${passReasonOptions}</select>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">패스 사유 상세 메모</label>
+            <input type="text" id="e_pass_note" class="form-control" value="${escapeHtml(deal.pass_reason_note||'')}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">재검토 조건</label>
+            <input type="text" id="e_reconsider" class="form-control" placeholder="예: 가격을 10% 낮추면 재검토" value="${escapeHtml(deal.reconsider_condition||'')}">
+          </div>
         </div>
         <div class="d-flex justify-content-end gap-2 mt-3">
           <button class="btn btn-secondary" onclick="toggleEdit()">취소</button>
@@ -389,6 +473,9 @@ async function saveEdit() {
     introducer_gp:  document.getElementById('e_gp').value.trim() || null,
     first_opinion:  document.getElementById('e_opinion').value.trim() || null,
     final_result:   document.getElementById('e_result').value || null,
+    pass_reason:          document.getElementById('e_pass_reason').value || null,
+    pass_reason_note:     document.getElementById('e_pass_note').value.trim() || null,
+    reconsider_condition: document.getElementById('e_reconsider').value.trim() || null,
   };
 
   try {
@@ -479,6 +566,20 @@ function render() {
               <div class="info-label">1차 의견</div>
               <div class="info-value">${escapeHtml(deal.first_opinion).replace(/\n/g,'<br>')}</div>
             </div>` : ''}
+            ${(deal.pass_reason || deal.pass_reason_note || deal.reconsider_condition) ? `
+            <hr>
+            <div class="info-row">
+              <div class="info-label">패스 사유</div>
+              <div class="info-value">
+                ${deal.pass_reason ? `<span class="badge bg-danger-subtle text-danger-emphasis border me-1">${escapeHtml(deal.pass_reason)}</span>` : ''}
+                ${deal.pass_reason_note ? escapeHtml(deal.pass_reason_note).replace(/\n/g,'<br>') : ''}
+              </div>
+            </div>
+            ${deal.reconsider_condition ? `
+            <div class="info-row">
+              <div class="info-label">재검토 조건</div>
+              <div class="info-value">${escapeHtml(deal.reconsider_condition).replace(/\n/g,'<br>')}</div>
+            </div>` : ''}` : ''}
           </div>
         </div>
 

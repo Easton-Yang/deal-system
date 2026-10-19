@@ -9,12 +9,14 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-3.0  2026-10-19  딜 목록에서 담당자 일괄 변경 (여러 건 선택 → 한 번에 지정).
+//                         기능 추가라 앞자리 올림
 //   Beta-2.0  2026-10-01  로그인 도입(Supabase Auth), 평문 비밀번호 제거,
 //                         DB를 로그인 사용자 전용으로 잠금(RLS), XSS 이스케이프,
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-2.0';
+const APP_VERSION = 'Beta-3.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -157,6 +159,40 @@ async function updateDeal(id, data) {
   const { data: updated, error } = await getSB().from('deals').update(data).eq('id', id).select().single();
   if (error) throw error;
   return updated;
+}
+
+// 여러 딜의 담당자를 한 번에 바꿉니다.
+// 한 건씩 updateDeal 을 247번 호출하면 요청이 247개라 느리고 중간에 실패하면
+// 일부만 바뀝니다. 라이브 모드는 .in('id', ids) 로 한 번에 보냅니다.
+async function bulkUpdateAssignee(ids, assignee) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+
+  if (DEMO_MODE) {
+    const deals = demoGet('deals_v3');
+    const set = new Set(ids);
+    let n = 0;
+    const now = new Date().toISOString();
+    deals.forEach(d => {
+      if (set.has(d.id)) { d.assigned_to = assignee; d.updated_at = now; n++; }
+    });
+    demoSet('deals_v3', deals);
+    return n;
+  }
+
+  // Supabase 는 한 요청에 담을 수 있는 id 개수에 실질적인 한계가 있으므로
+  // 200개씩 나눠 보냅니다 (247건이면 2회).
+  let n = 0;
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const { data, error } = await getSB()
+      .from('deals')
+      .update({ assigned_to: assignee })
+      .in('id', chunk)
+      .select('id');
+    if (error) throw error;
+    n += (data || []).length;
+  }
+  return n;
 }
 
 async function deleteDeal(id) {

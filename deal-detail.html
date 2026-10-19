@@ -230,6 +230,63 @@ async function renderFiles() {
     </div>`).join('');
 }
 
+// ── 다음 액션·기한 ─────────────────────────────────────────────
+
+async function saveNextAction() {
+  const updated = {
+    next_action:       document.getElementById('na_action').value.trim() || null,
+    next_action_owner: document.getElementById('na_owner').value || null,
+    next_action_due:   document.getElementById('na_due').value || null,
+    next_action_note:  document.getElementById('na_note').value.trim() || null,
+  };
+  try {
+    deal = await updateDeal(dealId, updated);
+    showToast('다음 액션이 저장되었습니다.', 'success');
+    render();
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'danger');
+  }
+}
+
+function nextActionSectionHTML() {
+  const ownerOptions = ['', ...TEAM_MEMBERS].map(m =>
+    `<option value="${escapeHtml(m)}" ${(deal.next_action_owner||'')===m ? 'selected':''}>${m ? escapeHtml(m) : '미지정'}</option>`
+  ).join('');
+
+  return `
+    <div class="detail-section mb-3">
+      <div class="detail-section-header"><i class="fas fa-tasks" style="color:#1a237e"></i> 다음 액션·기한</div>
+      <div class="detail-section-body">
+        <div class="row g-2">
+          <div class="col-md-5">
+            <label class="form-label" style="font-size:12px">다음에 할 일</label>
+            <input type="text" id="na_action" class="form-control form-control-sm"
+              placeholder="예: 수정 조건표 수령 대기" value="${escapeHtml(deal.next_action||'')}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:12px">담당자</label>
+            <select id="na_owner" class="form-select form-select-sm">${ownerOptions}</select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size:12px">기한</label>
+            <input type="date" id="na_due" class="form-control form-control-sm" value="${escapeHtml(deal.next_action_due||'')}">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-sm btn-primary w-100" onclick="saveNextAction()">
+              <i class="fas fa-save me-1"></i>저장
+            </button>
+          </div>
+          <div class="col-12">
+            <label class="form-label" style="font-size:12px">대기 사유 / 메모</label>
+            <input type="text" id="na_note" class="form-control form-control-sm"
+              placeholder="예: 상대측 회신 대기" value="${escapeHtml(deal.next_action_note||'')}">
+          </div>
+        </div>
+        ${deal.next_action_due ? `<div class="mt-2" style="font-size:12px">현재 기한: ${nextActionDueHTML(deal.next_action_due)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
 // ── 편집 모드 ──────────────────────────────────────────────────
 
 function toggleEdit() {
@@ -368,6 +425,9 @@ function render() {
       </div>
       <div class="detail-section-body">${stageProgressHTML(deal.current_stage)}</div>
     </div>
+
+    <!-- 다음 액션·기한 -->
+    ${nextActionSectionHTML()}
 
     <div class="row g-3">
       <!-- 왼쪽 -->

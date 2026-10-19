@@ -71,6 +71,7 @@
                   <th>담당자</th>
                   <th>딜 규모</th>
                   <th>현재 단계</th>
+                  <th>다음 액션</th>
                   <th>최종결과</th>
                   <th style="width:60px"></th>
                 </tr>
@@ -212,6 +213,7 @@ function renderTable(deals) {
       <td>${escapeHtml(d.assigned_to)}</td>
       <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
       <td>${stageBadge(d.current_stage)}</td>
+      <td>${nextActionSummaryHTML(d)}</td>
       <td>${resultBadge(d.final_result)}</td>
       <td>
         <button type="button" class="btn btn-sm btn-outline-danger js-delete-deal"
@@ -237,8 +239,9 @@ function daysSince(dateStr) {
 
 function kanbanCardHTML(d) {
   const days = daysSince(d.intake_date || d.created_at);
+  const overdue = isOverdue(d.next_action_due);
   return `
-    <div class="kanban-card"
+    <div class="kanban-card${overdue ? ' kc-overdue' : ''}"
       draggable="true"
       data-id="${d.id}"
       ondragstart="onDragStart(event,'${d.id}')"
@@ -250,6 +253,7 @@ function kanbanCardHTML(d) {
         <span><i class="fas fa-user me-1"></i>${escapeHtml(d.assigned_to)}</span>
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
+      ${d.next_action ? `<div class="kc-next-action"><i class="fas fa-arrow-right me-1"></i>${escapeHtml(d.next_action)} · ${nextActionDueHTML(d.next_action_due)}</div>` : ''}
       ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
       ${d.final_result ? `<div class="mt-1">${resultBadge(d.final_result)}</div>` : ''}
     </div>`;

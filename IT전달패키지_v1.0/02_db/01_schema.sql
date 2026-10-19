@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS deals (
   current_stage   TEXT        NOT NULL DEFAULT '접수',         -- 현재 검토 단계
   first_opinion   TEXT,                                        -- 1차 검토 의견 (NULL 허용)
   final_result    TEXT,                                        -- 최종 결과: 투자/패스/보류 (NULL=미결정)
+  next_action        TEXT,                                     -- 다음에 할 일 (NULL 허용)
+  next_action_owner  TEXT,                                     -- 다음 액션 담당자 (NULL 허용)
+  next_action_due    DATE,                                     -- 다음 액션 기한 (NULL 허용)
+  next_action_note   TEXT,                                     -- 대기 사유 등 메모 (NULL 허용)
   created_at      TIMESTAMPTZ DEFAULT NOW(),                   -- 최초 등록 일시
   updated_at      TIMESTAMPTZ DEFAULT NOW()                    -- 최종 수정 일시 (트리거로 자동 갱신)
 );
@@ -41,6 +45,10 @@ COMMENT ON TABLE deals IS '딜(투자건) 기본 정보 테이블';
 COMMENT ON COLUMN deals.deal_size IS '원 단위 정수. 예: 50억원 = 5000000000';
 COMMENT ON COLUMN deals.current_stage IS '현재 검토 단계. 접수/1차검토/심층검토/IC/투자확정/패스';
 COMMENT ON COLUMN deals.updated_at IS 'deals_set_updated_at 트리거가 UPDATE 시 자동 갱신';
+COMMENT ON COLUMN deals.next_action IS '다음에 해야 할 일 (자유 입력). 2026-10 추가';
+COMMENT ON COLUMN deals.next_action_owner IS '다음 액션을 수행할 담당자. 2026-10 추가';
+COMMENT ON COLUMN deals.next_action_due IS '다음 액션 기한. 2026-10 추가';
+COMMENT ON COLUMN deals.next_action_note IS '대기 사유 등 메모. 2026-10 추가';
 
 
 -- ──────────────────────────────────────────────────────────────

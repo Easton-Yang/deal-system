@@ -32,6 +32,7 @@ USER_FIELDS = [
     'asset_class', 'current_stage', 'final_result', 'first_opinion',
     'note_text', 'author', 'changed_by', 'file_name', 'uploaded_by',
     'file_path', 'full_name', 'username', 'email', 'intake_date', 'deal_size',
+    'next_action', 'next_action_owner', 'next_action_due', 'next_action_note',
 ]
 
 # 이미 안전한 처리를 거치는 형태
@@ -41,6 +42,8 @@ SAFE_WRAPPERS = [
     'stageBadge(', 'assetBadge(', 'resultBadge(',   # 고정 문자열만 반환
     'fileIcon(',                                    # 고정 CSS 클래스만 반환
     'stageProgressHTML(',   # 인자는 비교에만 쓰고, 출력은 STAGES 상수뿐
+    'nextActionDueHTML(',   # 날짜만 formatDate()로 가공, 원문 그대로 출력 안 함
+    'nextActionSummaryHTML(',  # 내부에서 escapeHtml() 처리 후 반환
     '.toLowerCase(', '.length',
 ]
 

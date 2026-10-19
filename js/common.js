@@ -9,12 +9,15 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-3.0  2026-10-19  딜별 "다음 액션·기한" 추가(담당자/기한/대기사유),
+//                         대시보드에 '내가 처리할 딜'·'기한 임박·초과' 추가.
+//                         deals 테이블 컬럼 4개 추가라 앞자리 올림
 //   Beta-2.0  2026-10-01  로그인 도입(Supabase Auth), 평문 비밀번호 제거,
 //                         DB를 로그인 사용자 전용으로 잠금(RLS), XSS 이스케이프,
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-2.0';
+const APP_VERSION = 'Beta-3.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -309,6 +312,42 @@ function formatCurrency(amount) {
   if (n >= 1e8)  return `${(n/1e8).toFixed(0)}억원`;
   if (n >= 1e4)  return `${(n/1e4).toFixed(0)}만원`;
   return `${n.toLocaleString()}원`;
+}
+
+// ── 다음 액션 기한 계산 ──────────────────────────────────────────
+
+// 오늘과 날짜 문자열의 차이(일). 미래면 양수, 지났으면 음수, 오늘이면 0.
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr); target.setHours(0,0,0,0);
+  return Math.round((target - today) / 86400000);
+}
+
+function isOverdue(dateStr) {
+  const d = daysUntil(dateStr);
+  return d !== null && d < 0;
+}
+
+// 기한을 날짜 + 지남/임박 표시로 보여줍니다 (목록·칸반·대시보드·상세 공용).
+// 인자는 날짜 값이고, formatDate()를 거치므로 별도 escape가 필요 없습니다.
+function nextActionDueHTML(dueStr) {
+  if (!dueStr) return '<span class="text-muted">-</span>';
+  const d = daysUntil(dueStr);
+  const label = formatDate(dueStr);
+  if (d < 0)  return `<span class="text-danger fw-bold">${label} (${-d}일 지남)</span>`;
+  if (d === 0) return `<span class="text-warning fw-bold">${label} (오늘)</span>`;
+  if (d <= 3) return `<span style="color:#f57c00">${label} (${d}일 후)</span>`;
+  return `<span>${label}</span>`;
+}
+
+// 목록·칸반에서 쓰는 다음 액션 한 줄 요약. 내부에서 escapeHtml 처리합니다.
+function nextActionSummaryHTML(d) {
+  if (!d.next_action) return '<span class="text-muted" style="font-size:12px">-</span>';
+  return `<div style="font-size:12px">
+    <div>${escapeHtml(d.next_action)}</div>
+    <div class="text-muted">${nextActionDueHTML(d.next_action_due)}${d.next_action_owner ? ' · ' + escapeHtml(d.next_action_owner) : ''}</div>
+  </div>`;
 }
 
 function stageBadge(stage) {

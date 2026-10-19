@@ -65,6 +65,22 @@
       </div>
     </div>
 
+    <!-- 다음 액션 현황 -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header"><i class="fas fa-user-clock me-2"></i>내가 처리할 딜</div>
+          <div class="card-body p-0"><div id="myActionList"></div></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header"><i class="fas fa-exclamation-circle me-2"></i>기한 임박·초과 (7일 이내)</div>
+          <div class="card-body p-0"><div id="dueSoonList"></div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 차트 + 단계별 분포 -->
     <div class="row g-3 mb-4">
       <div class="col-md-5">
@@ -149,6 +165,34 @@
   document.getElementById('statReview').textContent = reviewing.length;
   document.getElementById('statConfirmed').textContent = confirmed.length;
   document.getElementById('statThisMonth').textContent = thisMonth.length;
+
+  // 다음 액션 현황
+  function renderActionList(containerId, list, emptyMsg) {
+    const el = document.getElementById(containerId);
+    if (list.length === 0) {
+      el.innerHTML = `<p class="text-muted text-center py-4 mb-0" style="font-size:13px">${emptyMsg}</p>`;
+      return;
+    }
+    el.innerHTML = list.slice(0, 8).map(d => `
+      <div class="action-row" onclick="location.href='deal-detail.html?id=${d.id}'">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong style="font-size:13px">${escapeHtml(d.deal_name)}</strong>
+          <span style="font-size:12px">${nextActionDueHTML(d.next_action_due)}</span>
+        </div>
+        <div class="text-muted" style="font-size:12px">${escapeHtml(d.next_action)}${d.next_action_owner ? ' · ' + escapeHtml(d.next_action_owner) : ''}</div>
+      </div>`).join('');
+  }
+
+  const me = currentUserName();
+  const myActions = deals
+    .filter(d => d.next_action && d.next_action_owner === me)
+    .sort((a, b) => (a.next_action_due || '9999-99-99').localeCompare(b.next_action_due || '9999-99-99'));
+  renderActionList('myActionList', myActions, '내가 처리할 다음 액션이 없습니다.');
+
+  const dueSoon = deals
+    .filter(d => d.next_action && d.next_action_due && daysUntil(d.next_action_due) <= 7)
+    .sort((a, b) => a.next_action_due.localeCompare(b.next_action_due));
+  renderActionList('dueSoonList', dueSoon, '임박하거나 지난 기한이 없습니다.');
 
   // 자산군 도넛 차트
   const assetCount = {};

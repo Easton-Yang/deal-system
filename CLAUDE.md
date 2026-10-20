@@ -24,6 +24,7 @@
 | `deal-new.html` | 새 딜 입력 |
 | `deal-detail.html` | 상세: 편집, 단계 바, 메모, 첨부, 단계 이력 |
 | `portfolio.html` | 진행경과: 딜별 단계 소요일 타임라인 |
+| `weekly-report.html` | 주간보고: 이번 주 신규접수·단계변경·결정 + IC 결정대기·기한초과 스냅샷, 인쇄/PDF |
 | `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, LOGIN_EMAIL_DOMAIN |
 | `js/common.js` | 상수, 데이터 접근 함수(데모=localStorage / 라이브=Supabase), 유틸, 사이드바 |
 | `js/seed-data.js` | 데모 초기 데이터: 실제 딜 247건 (아래 참고) |
@@ -49,7 +50,9 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
   - 작은 수정(버튼 위치, 글자, 버그 하나) → 뒷자리 +1
   - 큰 변화(화면 추가, 기능 추가, DB 변경) → 앞자리 +1
   - 변경할 때 `APP_VERSION` 위의 변경 내역 표에 한 줄 추가하세요.
-  - 현재 `Beta-3.1` (2026-10-19 첨부 다운로드 + 오류 처리 수정. 버튼 추가와 버그 수정이라 뒷자리).
+  - 현재 `Beta-7.1` (2026-10-20 라이브 모드 seed-data.js 비노출 처리. 보안 수정이라 뒷자리).
+    두 세션이 독립적으로 Beta-3대까지 번호를 올려 병합 시 번호를 다시 매겼습니다.
+    자세한 변경 내역은 `js/common.js` 상단 표를 보세요(이 파일에는 전체를 옮겨 적지 않습니다).
 
 - **담당자 일괄 변경** (2026-10-19 추가, `deals.html` 목록 뷰). 247건을 한 건씩 편집하지 않고
   여러 건을 골라 한 번에 바꿉니다. `common.js`의 `bulkUpdateAssignee(ids, assignee)`가
@@ -83,6 +86,27 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
     (칸반 드래그에서 특히). 그래서 이력 실패는 경고 토스트로만 알립니다.
     이 구조를 '그냥 던지게' 되돌리지 마세요.
   - `deleteFile`: 저장소 삭제와 DB 삭제 양쪽 오류를 확인합니다.
+
+- **라이브 모드에서 seed-data.js(대외비 247건) 전송 차단** (2026-10-20). 배포를 준비하며 보니
+  `DEMO_MODE=false`에서도 모든 화면이 `js/seed-data.js`를 무조건 내려받고 있었습니다.
+  `login.html`은 로그인 전인데도 그대로 받아갔습니다. 화면에 쓰이진 않지만 파일 자체가
+  브라우저로 전송되므로, 주소만 알면 로그인 없이도 그 파일을 열어 전체 딜 목록을 볼 수 있는
+  상태였습니다. 이제 `DEMO_MODE`가 true일 때만 `document.write`로 불러옵니다(8개 HTML 파일
+  공통 패턴). 더는 안 쓰는 자동 `migrateDataToSupabase()`(페이지 열릴 때마다 실행, 최초 업로드가
+  끝난 뒤로는 RLS에 막혀 콘솔 에러만 남김)도 제거했습니다. `admin.html`의 수동 업로드 버튼
+  (`manualMigrateDataToSupabase`)은 유지됩니다.
+
+- **배포**: 2026-10-20 Vercel(`https://deal-system-eight.vercel.app`, 깃허브 연결, 자동 배포)에
+  이미 올라가 있던 걸 뒤늦게 파악했습니다. Netlify 이전 비밀번호 보호는 무료 요금제에서
+  지원되지 않아(2026-10-20 확인), 추가 비밀번호 없이 Supabase 로그인만으로 접근을 막는 방식으로
+  갑니다 — anon 차단(RLS) + 자가가입 차단 + seed-data 비노출이 모두 된 상태라 이걸로 충분하다고
+  판단했습니다. `git push`만 하면 Vercel이 알아서 재배포합니다.
+
+- **동시 작업 주의**: 2026-10-20에 로컬 세션과 별도로 클라우드 세션이 같은 저장소를 건드려
+  `origin/main`이 갈라져 있었습니다(담당자 일괄 변경, 첨부 다운로드, 오류 처리 수정, 보안 점검
+  스크립트). `git merge`로 병합했고 `js/common.js`의 버전 변경 내역만 충돌했습니다(둘 다
+  Beta-2.0에서 독립적으로 번호를 올려서). 작업을 시작하기 전에 **`git fetch` + `git log
+  main..origin/main`으로 원격에 모르는 커밋이 있는지 먼저 확인하세요.**
 
 - **service_role 키 (가장 위험한 자산)**: `.service_role_key` 파일에 있고 `.gitignore` 처리됩니다.
   저장소 이력에 올라간 적은 **없습니다**(2026-10-01 전체 이력 검색 확인).
@@ -191,20 +215,13 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
    빈 문자열이어도 동작합니다(로그인 화면에서 메일 주소 전체 입력).
    ※ 2번에서 만든 계정의 실제 도메인과 **일치해야** 합니다. 추측해서 넣지 마세요.
 2. ✅ Supabase Authentication > Users에서 팀원 4명 계정 생성 — 완료
-3. ⬜ **`보안설정_SQL.sql` 실행** (Supabase SQL Editor). **이것을 하지 않으면 이번 작업의 효력이 거의 없습니다.**
-   화면 쪽 차단은 우회 가능하고, 실제 자물쇠는 RLS입니다.
-   → 새 코드를 맥북에 받은 **뒤에** 실행하세요. 먼저 실행하면 예전 코드로는 로그인이 막힙니다.
-   → 2026-10-01: 맥북에 `anon` 전체 개방 정책을 만드는 SQL 파일이 있었고 실행된 것으로 추정됩니다.
-      `보안설정_SQL.sql`이 기존 정책을 전부 지우도록 수정했으므로 이 실행으로 정리됩니다.
-3-1. ⬜ **`02_RLS정책_SQL에디터에_붙여넣기.sql` 삭제** (맥북). 실행하면 잠금이 풀립니다.
-3-2. ⬜ **`.service_role_key` 삭제** (맥북 + 백업 폴더). 데이터 업로드가 끝났으면 남겨둘 이유가 없습니다.
-   → **3·3-1·3-2 확인과 정리는 `bash tools/mac/finish_security.sh` 한 번으로 처리됩니다.**
-     사용자에게 이 명령 하나만 안내하면 됩니다. SQL 실행만 사람이 해야 합니다.
-4. ⬜ **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 외부인 자가 가입 차단.
-5. ⬜ **GitHub 저장소 비공개 전환** 및 로그인 실제 동작 테스트 (크롬 캐시 때문에 `⌘⇧R` 필요).
-   ※ 비공개 전환은 **Claude 권한으로 불가능합니다**(저장소 설정 변경 도구가 없음). 사용자가 직접:
-     Settings → 맨 아래 Danger Zone → Change visibility → Make private.
-     2026-10-01 기준 저장소는 **공개 상태**입니다(비밀번호는 이력에 올라간 적 없음).
+3. ✅ **`보안설정_SQL.sql` 실행 확인** — 2026-10-20, anon 키로 `deals` 테이블에 직접 접근 시도해
+   `401 permission denied for table deals` 확인(Claude가 직접 검증). RLS 잠금 정상 작동.
+3-1. ✅ **`02_RLS정책_SQL에디터에_붙여넣기.sql` 삭제 확인** (맥북, 2026-10-20, 파일 없음 확인).
+3-2. ✅ **`.service_role_key` 삭제 확인** (맥북, 2026-10-20, 파일 없음 확인).
+4. ✅ **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 사용자 확인, 2026-10-20 완료.
+5. ✅ **GitHub 저장소 비공개 전환** — 사용자 확인, 2026-10-20 기준 비공개 상태.
+   로그인 실제 동작 테스트(크롬 캐시 때문에 `⌘⇧R` 필요)는 아직 사용자가 직접 할 일로 남아있습니다.
 6. ✅ IT 전달 패키지 재생성 — 완료 (`login.html`·`admin.html` 추가, SQL 잠금, 문서 갱신, zip 재압축)
 7. ⬜ **IT팀에 재전달**: 패키지 내용이 바뀌었습니다. 예전 zip을 이미 보냈다면 새 것으로 다시 보내야 합니다.
    (CLAUDE.md 이전 기록상 첨부 제한으로 막혀 실제 전달은 확인되지 않았음)
@@ -230,13 +247,19 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
    `currentUserName()`은 메일 @ 앞부분(아이디 형식)을 돌려주므로, 화면에 한글 이름을
    보이려면 `currentUserName()`이 `full_name`을 먼저 쓰도록 바꾸고 Supabase 계정의
    `user_metadata.full_name`에 한글 이름을 넣어야 합니다. 사용자 결정 필요.
+8. ✅ 2026-10-20에 완성(로컬 세션): 다음 액션·기한 관리, 단계/상태 분리, 패스 사유·재검토
+   조건, 진행경과 기간 계산 정비(엑셀이관 구간 제외), 주간보고 화면. 자세한 내용은
+   `js/common.js` 상단 버전 표(Beta-4.0~7.0)를 보세요.
+9. **투자조건 구조화·자산군 재정의**(사용자가 함께 제시한 분석 문서의 4순위 항목)는
+   아직 시작 안 함. 먼저 "자산군(투자 대상) vs 투자수단"을 어떻게 나눌지 결정이 필요하고,
+   바꾸면 `ASSET_CLASSES`·DB 제약·명세서 세 곳을 함께 고쳐야 하는 큰 작업입니다.
 
 ## 환경 주의사항
 
-- **맥북 로컬 상태 (2026-10-01 확인)**: 폴더는 `/Users/dm/Documents/deal-system`.
+- **맥북 로컬 상태 (2026-10-20 확인)**: 폴더는 `/Users/dm/Documents/deal-system`.
   - `.claude/settings.local.json`은 로컬 변경 상태로 두었습니다(저장소 커밋과 무관).
-  - `.service_role_key`(220바이트, 권한 600)가 있습니다. 위 '핵심 결정 사항' 참고.
-  - 백업 폴더 `deal-system-백업-20261001`에도 키 사본이 들어갔습니다. 정리 필요.
+  - `.service_role_key`는 본 폴더와 백업 폴더(`deal-system-백업-20261001`) 양쪽 다
+    삭제 확인됨(2026-10-20). 업로드가 다시 필요하면 Supabase → Settings → API에서 재발급.
   - 회사 엑셀 원본은 **저장소에 없고 맥북에만** 있습니다. 기존 폴더를 지우면 사라집니다.
 - `tools/windows/`의 스크립트는 **Windows 전용**입니다. Word·Excel COM 자동화와 PowerShell 5.1을 씁니다.
   - `gen_frd.ps1`: 명세서 docx 생성

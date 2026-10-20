@@ -37,7 +37,8 @@ COPY_AS_IS = [
     ('css/style.css', 'css/style.css'),
     ('js/common.js', 'js/common.js'),
     ('js/seed-data.js', 'js/seed-data.js'),
-    ('favicon.svg', 'favicon.svg'),
+    ('favicon.png', 'favicon.png'),
+    ('img/woongjin-preed-logo.png', 'img/woongjin-preed-logo.png'),
 ]
 
 # 덮어쓰면 안 되는 파일 (운영용 설정 템플릿)

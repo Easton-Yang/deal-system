@@ -9,12 +9,16 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-3.1  2026-10-19  첨부파일 다운로드 버튼 추가(없어서 올린 파일을 꺼낼 수
+//                         없었음). 단계 이력·파일 삭제가 오류를 무시하던 문제 수정
+//   Beta-3.0  2026-10-19  딜 목록에서 담당자 일괄 변경 (여러 건 선택 → 한 번에 지정).
+//                         기능 추가라 앞자리 올림
 //   Beta-2.0  2026-10-01  로그인 도입(Supabase Auth), 평문 비밀번호 제거,
 //                         DB를 로그인 사용자 전용으로 잠금(RLS), XSS 이스케이프,
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-2.0';
+const APP_VERSION = 'Beta-3.1';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -141,7 +145,7 @@ async function createDeal(data) {
   }
   const { data: created, error } = await getSB().from('deals').insert(data).select().single();
   if (error) throw error;
-  await addStageHistory(created.id, created.current_stage, currentUserName());
+  await tryAddStageHistory(created.id, created.current_stage, currentUserName());
   return created;
 }
 
@@ -157,6 +161,40 @@ async function updateDeal(id, data) {
   const { data: updated, error } = await getSB().from('deals').update(data).eq('id', id).select().single();
   if (error) throw error;
   return updated;
+}
+
+// 여러 딜의 담당자를 한 번에 바꿉니다.
+// 한 건씩 updateDeal 을 247번 호출하면 요청이 247개라 느리고 중간에 실패하면
+// 일부만 바뀝니다. 라이브 모드는 .in('id', ids) 로 한 번에 보냅니다.
+async function bulkUpdateAssignee(ids, assignee) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+
+  if (DEMO_MODE) {
+    const deals = demoGet('deals_v3');
+    const set = new Set(ids);
+    let n = 0;
+    const now = new Date().toISOString();
+    deals.forEach(d => {
+      if (set.has(d.id)) { d.assigned_to = assignee; d.updated_at = now; n++; }
+    });
+    demoSet('deals_v3', deals);
+    return n;
+  }
+
+  // Supabase 는 한 요청에 담을 수 있는 id 개수에 실질적인 한계가 있으므로
+  // 200개씩 나눠 보냅니다 (247건이면 2회).
+  let n = 0;
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const { data, error } = await getSB()
+      .from('deals')
+      .update({ assigned_to: assignee })
+      .in('id', chunk)
+      .select('id');
+    if (error) throw error;
+    n += (data || []).length;
+  }
+  return n;
 }
 
 async function deleteDeal(id) {
@@ -175,7 +213,7 @@ async function changeStage(dealId, newStage) {
   const prevDeal = await getDeal(dealId);
   if (!prevDeal) throw new Error('Deal not found');
   await updateDeal(dealId, { current_stage: newStage });
-  await addStageHistory(dealId, newStage, currentUserName());
+  await tryAddStageHistory(dealId, newStage, currentUserName());
 }
 
 // ── 단계 이력 ──────────────────────────────────────────────────
@@ -199,7 +237,27 @@ async function addStageHistory(dealId, stage, changedBy) {
     demoSet('stage_history_v3', hist);
     return;
   }
-  await getSB().from('deal_stage_history').insert({ deal_id: dealId, stage, changed_by: changedBy });
+  const { error } = await getSB()
+    .from('deal_stage_history')
+    .insert({ deal_id: dealId, stage, changed_by: changedBy });
+  // 예전에는 error 를 보지 않고 넘어갔습니다. 그러면 단계는 바뀌었는데 이력만
+  // 빠져서, 진행경과 화면이 조용히 틀린 값을 보여줍니다.
+  if (error) throw new Error('단계 이력 기록 실패: ' + error.message);
+}
+
+// 단계 이력 기록을 시도하되, 실패해도 '본래 작업'은 성공으로 둡니다.
+// 단계 변경 자체는 이미 저장됐는데 여기서 예외를 던지면, 화면은 예전 단계로
+// 되돌아간 것처럼 보이고 DB 와 어긋납니다(칸반 드래그에서 특히). 그래서
+// 실패는 경고로만 알립니다.
+async function tryAddStageHistory(dealId, stage, changedBy) {
+  try {
+    await addStageHistory(dealId, stage, changedBy);
+    return null;
+  } catch (err) {
+    console.error(err);
+    showToast(err.message + ' (단계 변경 자체는 저장되었습니다)', 'warning');
+    return err.message;
+  }
 }
 
 // ── 메모 ───────────────────────────────────────────────────────
@@ -284,8 +342,36 @@ async function deleteFile(fileId, filePath) {
     demoSet('files_v3', demoGet('files_v3').filter(f => f.id !== fileId));
     return;
   }
-  if (filePath) await getSB().storage.from('deal-files').remove([filePath]);
-  await getSB().from('deal_files').delete().eq('id', fileId);
+  // 예전에는 두 호출의 error 를 보지 않았습니다. 저장소 삭제가 실패했는데도
+  // 목록에서 사라지면(또는 반대로) 파일과 기록이 어긋납니다.
+  if (filePath) {
+    const { error: stErr } = await getSB().storage.from('deal-files').remove([filePath]);
+    if (stErr) throw new Error('저장소에서 파일 삭제 실패: ' + stErr.message);
+  }
+  const { error } = await getSB().from('deal_files').delete().eq('id', fileId);
+  if (error) throw new Error('파일 기록 삭제 실패: ' + error.message);
+}
+
+// 첨부파일 내려받기용 임시 주소를 만듭니다.
+// 버킷이 비공개라 주소를 알아도 열리지 않습니다. 로그인한 사용자만 받을 수 있는
+// 서명된 주소(기본 60초 유효)를 그때그때 만들어 씁니다.
+//
+// download 옵션에 원래 파일명을 넘기는 것이 중요합니다. 저장 경로에는
+// 한글 파일명을 쓰지 않고 난수를 쓰기 때문에(위 uploadFile 참고), 이 옵션이
+// 없으면 'a1b2c3.pdf' 같은 이름으로 내려갑니다.
+async function getFileUrl(filePath, fileName) {
+  if (DEMO_MODE) {
+    throw new Error('데모 모드에서는 첨부파일이 실제로 저장되지 않아 내려받을 수 없습니다.');
+  }
+  if (!filePath) {
+    throw new Error('이 첨부에는 저장 경로가 없어 내려받을 수 없습니다.');
+  }
+  const opts = fileName ? { download: fileName } : { download: true };
+  const { data, error } = await getSB().storage
+    .from('deal-files')
+    .createSignedUrl(filePath, 60, opts);
+  if (error) throw new Error('다운로드 주소 생성 실패: ' + error.message);
+  return data.signedUrl;
 }
 
 // ── 유틸리티 ───────────────────────────────────────────────────

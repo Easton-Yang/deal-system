@@ -16,15 +16,24 @@ ON CONFLICT (id) DO NOTHING;
 -- 이미 만들어진 버킷이 공개 상태라면 비공개로 되돌립니다
 UPDATE storage.buckets SET public = false WHERE id = 'deal-files';
 
--- 예전 버전에서 만든 anon 허용 정책을 제거
-DROP POLICY IF EXISTS "deal_files_select" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_insert" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_delete" ON storage.objects;
-
--- 다시 실행해도 오류가 나지 않도록
-DROP POLICY IF EXISTS "deal_files_select_auth" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_insert_auth" ON storage.objects;
-DROP POLICY IF EXISTS "deal_files_delete_auth" ON storage.objects;
+-- 'deal-files' 버킷에 걸린 기존 정책을 전부 제거합니다.
+-- 이름을 하드코딩하면 다른 이름의 느슨한 정책이 살아남습니다.
+-- (다른 버킷의 정책은 건드리지 않도록, 정책 내용에 'deal-files' 가
+--  들어 있는 것만 골라냅니다.)
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects'
+      AND (coalesce(qual, '') LIKE '%deal-files%'
+        OR coalesce(with_check, '') LIKE '%deal-files%')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', r.policyname);
+    RAISE NOTICE '기존 Storage 정책 제거: %', r.policyname;
+  END LOOP;
+END $$;
 
 -- 로그인한 사용자(authenticated)만 조회·업로드·삭제
 CREATE POLICY "deal_files_select_auth" ON storage.objects

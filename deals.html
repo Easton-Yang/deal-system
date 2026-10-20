@@ -59,6 +59,26 @@
       </button>
     </div>
 
+    <!-- ── 담당자 일괄 변경 바 (선택한 건이 있을 때만 보임) ── -->
+    <div id="bulkBar" class="card mb-3 d-none" style="border-left:4px solid #1a237e">
+      <div class="card-body py-2 d-flex align-items-center flex-wrap gap-2">
+        <span class="fw-bold" style="color:#1a237e">
+          <i class="fas fa-check-square me-1"></i><span id="bulkCount">0</span>건 선택
+        </span>
+        <span id="bulkHidden" class="text-danger d-none" style="font-size:12px"></span>
+        <span class="text-muted" style="font-size:13px">담당자를</span>
+        <select id="bulkAssignee" class="form-select form-select-sm" style="width:140px"></select>
+        <span class="text-muted" style="font-size:13px">(으)로</span>
+        <button type="button" class="btn btn-sm btn-primary" id="bulkApplyBtn">
+          <i class="fas fa-user-check me-1"></i>변경
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClearBtn">
+          선택 해제
+        </button>
+        <span id="bulkStatus" class="ms-2" style="font-size:13px"></span>
+      </div>
+    </div>
+
     <!-- ── 목록 뷰 ── -->
     <div id="listView">
       <div class="card">
@@ -67,6 +87,10 @@
             <table class="table mb-0">
               <thead>
                 <tr>
+                  <th style="width:36px" class="text-center">
+                    <input type="checkbox" class="form-check-input" id="checkAll"
+                           title="보이는 딜 전체 선택">
+                  </th>
                   <th style="width:28%">딜명</th>
                   <th>자산군</th>
                   <th>인입경로</th>
@@ -173,6 +197,11 @@
 <script>
 let allDeals = [];
 let currentView = 'list';
+
+// 담당자 일괄 변경을 위해 '선택된 딜'을 기억합니다.
+// 필터를 바꾸면 표가 다시 그려지는데, 그때도 선택이 풀리지 않게 하려고
+// 화면이 아니라 여기에 보관합니다.
+const selectedIds = new Set();
 let deleteTargetId = null;
 let dragSrcId = null;
 const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
@@ -183,6 +212,8 @@ function setView(view) {
   currentView = view;
   document.getElementById('listView').classList.toggle('d-none', view !== 'list');
   document.getElementById('kanbanView').classList.toggle('d-none', view !== 'kanban');
+  // 칸반에는 체크박스가 없으므로 일괄 변경 바도 감춥니다.
+  syncBulkBar();
   document.getElementById('btnList').className   = view === 'list'   ? 'btn btn-sm btn-primary'         : 'btn btn-sm btn-outline-primary';
   document.getElementById('btnKanban').className = view === 'kanban' ? 'btn btn-sm btn-primary'         : 'btn btn-sm btn-outline-primary';
   applyFilters();
@@ -247,11 +278,17 @@ function renderTable(deals) {
   if (deals.length === 0) {
     tbody.innerHTML = '';
     empty.classList.remove('d-none');
+    document.getElementById('checkAll').checked = false;
+    syncBulkBar();
     return;
   }
   empty.classList.add('d-none');
   tbody.innerHTML = deals.map(d => `
     <tr onclick="location.href='deal-detail.html?id=${d.id}'" style="cursor:pointer">
+      <td class="text-center js-check-cell" onclick="event.stopPropagation()">
+        <input type="checkbox" class="form-check-input js-row-check"
+               data-id="${escapeHtml(d.id)}" ${selectedIds.has(d.id) ? 'checked' : ''}>
+      </td>
       <td>
         <div style="font-weight:600">${escapeHtml(d.deal_name)}</div>
         ${d.introducer_gp ? `<div style="font-size:11px;color:#6c757d">${escapeHtml(d.introducer_gp)}</div>` : ''}
@@ -272,7 +309,113 @@ function renderTable(deals) {
         </button>
       </td>
     </tr>`).join('');
+
+  // 보이는 딜이 모두 선택됐는지에 따라 머리글 체크박스를 맞춥니다.
+  const allChecked = deals.length > 0 && deals.every(d => selectedIds.has(d.id));
+  document.getElementById('checkAll').checked = allChecked;
+  syncBulkBar();
 }
+
+// ── 담당자 일괄 변경 ────────────────────────────────────────────
+
+// 일괄 변경 바를 현재 선택 상태에 맞춰 보이거나 숨깁니다.
+function syncBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  if (!bar) return;
+  const show = currentView === 'list' && selectedIds.size > 0;
+  bar.classList.toggle('d-none', !show);
+  document.getElementById('bulkCount').textContent = selectedIds.size;
+  if (!show) { document.getElementById('bulkStatus').textContent = ''; }
+
+  // 필터를 바꿔도 선택은 유지됩니다. 자산군별로 걸러 가며 골라 담을 수 있어
+  // 편하지만, '지금 화면에 안 보이는 건'까지 함께 바뀌므로 그 숫자를 알려줍니다.
+  const hiddenEl = document.getElementById('bulkHidden');
+  if (!hiddenEl) return;
+  if (!show) { hiddenEl.classList.add('d-none'); return; }
+  const visibleIds = new Set(filterDeals().map(d => d.id));
+  let hidden = 0;
+  selectedIds.forEach(id => { if (!visibleIds.has(id)) hidden++; });
+  if (hidden > 0) {
+    hiddenEl.textContent = `(현재 화면에 보이지 않는 ${hidden}건 포함)`;
+    hiddenEl.classList.remove('d-none');
+  } else {
+    hiddenEl.classList.add('d-none');
+  }
+}
+
+// 담당자 드롭다운 채우기 (미배정 포함 — 배정을 취소할 수도 있어야 합니다)
+function buildBulkAssigneeOptions() {
+  const sel = document.getElementById('bulkAssignee');
+  sel.innerHTML = [...TEAM_MEMBERS, UNASSIGNED]
+    .map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+}
+
+// 행 체크박스: click 은 위의 td 에서 멈추지만 change 는 따로 올라옵니다.
+document.getElementById('dealsBody').addEventListener('change', function (e) {
+  const box = e.target.closest('.js-row-check');
+  if (!box) return;
+  const id = box.dataset.id;
+  if (box.checked) selectedIds.add(id); else selectedIds.delete(id);
+
+  const visible = filterDeals();
+  document.getElementById('checkAll').checked =
+    visible.length > 0 && visible.every(d => selectedIds.has(d.id));
+  syncBulkBar();
+});
+
+// 머리글 체크박스: '지금 화면에 보이는(필터된) 딜'만 대상으로 합니다.
+document.getElementById('checkAll').addEventListener('change', function () {
+  const visible = filterDeals();
+  visible.forEach(d => this.checked ? selectedIds.add(d.id) : selectedIds.delete(d.id));
+  document.querySelectorAll('.js-row-check').forEach(b => { b.checked = this.checked; });
+  syncBulkBar();
+});
+
+document.getElementById('bulkClearBtn').addEventListener('click', () => {
+  selectedIds.clear();
+  document.querySelectorAll('.js-row-check').forEach(b => { b.checked = false; });
+  document.getElementById('checkAll').checked = false;
+  syncBulkBar();
+});
+
+document.getElementById('bulkApplyBtn').addEventListener('click', async function () {
+  const ids = Array.from(selectedIds);
+  const who = document.getElementById('bulkAssignee').value;
+  const statusEl = document.getElementById('bulkStatus');
+
+  if (ids.length === 0) return;
+  const visibleIds = new Set(filterDeals().map(d => d.id));
+  const hidden = ids.filter(id => !visibleIds.has(id)).length;
+  const extra = hidden > 0
+    ? `\n\n(이 중 ${hidden}건은 현재 화면에 보이지 않는 딜입니다)`
+    : '';
+  if (!confirm(`${ids.length}건의 담당자를 '${who}'(으)로 변경하시겠습니까?${extra}`)) return;
+
+  this.disabled = true;
+  const label = this.innerHTML;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>변경 중...';
+  statusEl.className = 'ms-2 text-muted';
+  statusEl.textContent = '';
+
+  try {
+    const n = await bulkUpdateAssignee(ids, who);
+
+    // 화면이 들고 있는 목록도 같이 고쳐, 다시 불러오지 않고 바로 반영합니다.
+    const set = new Set(ids);
+    allDeals.forEach(d => { if (set.has(d.id)) d.assigned_to = who; });
+
+    selectedIds.clear();
+    document.getElementById('checkAll').checked = false;
+    applyFilters();
+    showToast(`${n}건의 담당자를 '${escapeHtml(who)}'(으)로 변경했습니다.`, 'success');
+  } catch (err) {
+    statusEl.className = 'ms-2 text-danger';
+    statusEl.textContent = '변경 실패: ' + err.message;
+  } finally {
+    this.disabled = false;
+    this.innerHTML = label;
+  }
+});
 
 // ── 칸반 뷰 ────────────────────────────────────────────────────
 
@@ -426,7 +569,7 @@ async function confirmPassReason() {
   };
   try {
     const saved = await updateDeal(passTargetId, updated);
-    await addStageHistory(passTargetId, '패스', currentUserName());
+    await tryAddStageHistory(passTargetId, '패스', currentUserName());
     const idx = allDeals.findIndex(d => d.id === passTargetId);
     if (idx !== -1) allDeals[idx] = saved;
     passReasonModal.hide();
@@ -498,6 +641,7 @@ document.getElementById('dealsBody').addEventListener('click', function (e) {
   const initNavId = new URLSearchParams(window.location.search).get('view') === 'kanban' ? 'kanban' : 'deals';
   renderNav(initNavId);
   buildFilters();
+  buildBulkAssigneeOptions();
   loadUrlParams();
   try {
     allDeals = await getDeals();

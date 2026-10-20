@@ -219,7 +219,12 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
    `401 permission denied for table deals` 확인(Claude가 직접 검증). RLS 잠금 정상 작동.
 3-1. ✅ **`02_RLS정책_SQL에디터에_붙여넣기.sql` 삭제 확인** (맥북, 2026-10-20, 파일 없음 확인).
 3-2. ✅ **`.service_role_key` 삭제 확인** (맥북, 2026-10-20, 파일 없음 확인).
-4. ✅ **Authentication > Providers > Email에서 'Enable email signup' 끄기** — 사용자 확인, 2026-10-20 완료.
+4. ✅ **외부인 자가 가입 차단** — 사용자 확인, 2026-10-20 완료.
+   ※ 위치 정정: **Authentication > Providers > Email**의 "Enable email provider"는
+     가입·로그인을 **함께** 켜고 끄는 스위치라 끄면 로그인까지 막힙니다(실제로 한 번 겪음 —
+     "Email logins are disabled" 오류). 신규 가입만 막는 토글은 별도 위치인
+     **Authentication > Sign In / Providers > User Signups > "Allow new users to sign up"**
+     에 있습니다. 로그인은 막지 않고 가입만 막으려면 이쪽을 꺼야 합니다.
 5. ✅ **GitHub 저장소 비공개 전환** — 사용자 확인, 2026-10-20 기준 비공개 상태.
    로그인 실제 동작 테스트(크롬 캐시 때문에 `⌘⇧R` 필요)는 아직 사용자가 직접 할 일로 남아있습니다.
 6. ✅ IT 전달 패키지 재생성 — 완료 (`login.html`·`admin.html` 추가, SQL 잠금, 문서 갱신, zip 재압축)

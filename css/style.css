@@ -575,3 +575,16 @@ body {
   background: #eeeeee;
   color: #9e9e9e;
 }
+
+/* ── 인쇄 (주간 보고 등) ── */
+.print-only { display: none; }
+
+@media print {
+  .no-print   { display: none !important; }
+  .print-only { display: block !important; }
+  #sidebar    { display: none !important; }
+  #main       { margin-left: 0 !important; }
+  .content-area { padding: 0 !important; }
+  body  { background: #fff !important; }
+  .card { break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; }
+}

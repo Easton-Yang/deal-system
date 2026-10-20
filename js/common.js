@@ -9,6 +9,9 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-6.0  2026-10-19  '주간보고' 화면 추가: 이번 주 신규접수·단계변경·결정·
+//                         IC 결정대기·기한초과 다음액션을 한 화면에 모으고
+//                         인쇄/PDF 내보내기 지원. 화면 추가라 앞자리 올림
 //   Beta-5.1  2026-10-19  진행경과 기간 계산 정비: 엑셀이관 구간은 '기간 미상'
 //                         으로 표시하고 계산에서 제외, 1일 미만은 시간 단위로
 //                         표시, 투자확정·패스는 결정일에 경과 집계를 멈춤.
@@ -27,7 +30,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-5.1';
+const APP_VERSION = 'Beta-6.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -217,6 +220,17 @@ async function getStageHistory(dealId) {
   }
   const { data, error } = await getSB().from('deal_stage_history')
     .select('*').eq('deal_id', dealId).order('changed_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+// 특정 시각 이후의 단계 변경 이력을 모든 딜에 걸쳐 가져옵니다 (주간 보고용).
+async function getStageHistorySince(sinceISO) {
+  if (DEMO_MODE) {
+    return demoGet('stage_history_v3').filter(h => h.changed_at >= sinceISO);
+  }
+  const { data, error } = await getSB().from('deal_stage_history')
+    .select('*').gte('changed_at', sinceISO).order('changed_at', { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -433,6 +447,7 @@ function renderNav(activePage) {
     { id:'deals',     label:'딜 목록',    icon:'fa-list',           href:'deals.html' },
     { id:'kanban',    label:'칸반 보드',  icon:'fa-columns',        href:'deals.html?view=kanban' },
     { id:'portfolio', label:'진행경과',   icon:'fa-project-diagram', href:'portfolio.html' },
+    { id:'report',    label:'주간보고',   icon:'fa-file-lines',     href:'weekly-report.html' },
     { id:'new',       label:'새 딜 입력', icon:'fa-plus-circle',    href:'deal-new.html' },
   ];
 

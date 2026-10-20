@@ -24,7 +24,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 FILES = ['index.html', 'deals.html', 'deal-new.html',
-         'deal-detail.html', 'portfolio.html', 'login.html', 'admin.html']
+         'deal-detail.html', 'portfolio.html', 'login.html', 'admin.html',
+         'weekly-report.html']
 
 # DB·사용자에서 오는 텍스트 필드
 USER_FIELDS = [

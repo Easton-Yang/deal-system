@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주간 보고 – 딜 관리 시스템</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="sidebar" class="no-print"></div>
+
+<div id="main">
+  <div class="page-header no-print">
+    <div>
+      <h1 class="page-title"><i class="fas fa-file-lines me-2" style="color:#1a237e"></i>주간 보고</h1>
+      <p class="page-sub" id="weekRangeLabel">불러오는 중...</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <button class="btn btn-sm btn-outline-secondary" onclick="changeWeek(-1)">
+        <i class="fas fa-chevron-left me-1"></i>이전 주
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="changeWeek(0)">이번 주</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="changeWeek(1)">
+        다음 주<i class="fas fa-chevron-right ms-1"></i>
+      </button>
+      <button class="btn btn-sm btn-primary" onclick="window.print()">
+        <i class="fas fa-print me-1"></i>인쇄 / PDF로 저장
+      </button>
+    </div>
+  </div>
+
+  <div class="content-area">
+
+    <!-- 인쇄 전용 제목 (화면에는 숨김) -->
+    <div class="print-only mb-3">
+      <h2 class="mb-0">딜 관리 시스템 — 주간 보고</h2>
+      <p class="text-muted" id="weekRangeLabelPrint"></p>
+    </div>
+
+    <div id="reportBody">
+      <div class="text-center py-5 text-muted">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <p class="mt-3">불러오는 중...</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/common.js"></script>
+<script>
+let weekOffset = 0;
+
+// 월요일 시작 기준 주 범위. offset: 0=이번 주, -1=지난 주, +1=다음 주
+function getWeekRange(offset) {
+  const now = new Date();
+  const day = now.getDay(); // 0=일 .. 6=토
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + diffToMonday + offset * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function fmtRange(start, end) {
+  const f = d => `${d.getMonth()+1}월 ${d.getDate()}일`;
+  return `${f(start)} (월) ~ ${f(end)} (일)`;
+}
+
+function reportTable(headers, rows, emptyMsg) {
+  if (rows.length === 0) {
+    return `<p class="text-muted text-center py-3 mb-0" style="font-size:13px">${emptyMsg}</p>`;
+  }
+  return `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table></div>`;
+}
+
+function sectionCard(icon, title, count, bodyHTML, note) {
+  return `
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas ${icon} me-2"></i>${title}</span>
+        <span class="badge bg-secondary">${count}건</span>
+      </div>
+      ${note ? `<div class="px-3 pt-2 text-muted" style="font-size:12px">${note}</div>` : ''}
+      <div class="card-body p-0">${bodyHTML}</div>
+    </div>`;
+}
+
+// ── 데이터 로드 ────────────────────────────────────────────────
+
+async function loadReport() {
+  const { start, end } = getWeekRange(weekOffset);
+  document.getElementById('weekRangeLabel').textContent = fmtRange(start, end) + ' 기준';
+  document.getElementById('weekRangeLabelPrint').textContent = fmtRange(start, end) + ' 기준';
+
+  const deals = await getDeals();
+  const dealById = {};
+  deals.forEach(d => { dealById[d.id] = d; });
+
+  const inRange = dt => dt >= start && dt <= end;
+
+  // 1) 이번 주 신규 접수
+  const newIntakes = deals.filter(d => inRange(new Date(d.intake_date || d.created_at)));
+  const newIntakeIds = new Set(newIntakes.map(d => d.id));
+
+  // 2) 이번 주 단계 변경 (엑셀이관 이력 제외, 신규접수와 겹치는 '접수' 최초 등록도 제외)
+  const history = (await getStageHistorySince(start.toISOString()))
+    .filter(h => new Date(h.changed_at) <= end)
+    .filter(h => h.changed_by && h.changed_by !== '엑셀이관')
+    .filter(h => !(h.stage === '접수' && newIntakeIds.has(h.deal_id)))
+    .sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
+
+  const decisions = history.filter(h => ['투자확정', '패스'].includes(h.stage));
+  const stageChanges = history.filter(h => !['투자확정', '패스'].includes(h.stage));
+
+  // 3) 결정 필요 (IC 단계 전체 — 현재 시점 스냅샷)
+  const needsDecision = deals.filter(d => d.current_stage === 'IC');
+
+  // 4) 기한 초과 다음 액션 (현재 시점 스냅샷)
+  const overdue = deals
+    .filter(d => d.next_action && d.next_action_due && isOverdue(d.next_action_due))
+    .sort((a, b) => a.next_action_due.localeCompare(b.next_action_due));
+
+  render({ newIntakes, stageChanges, decisions, needsDecision, overdue, dealById });
+}
+
+// ── 행 렌더링 ──────────────────────────────────────────────────
+
+function goTo(id) { return `onclick="location.href='deal-detail.html?id=${id}'" style="cursor:pointer"`; }
+
+function intakeRow(d) {
+  return `<tr ${goTo(d.id)}>
+    <td>${escapeHtml(d.deal_name)}</td>
+    <td>${assetBadge(d.asset_class)}</td>
+    <td>${escapeHtml(d.assigned_to)}</td>
+    <td>${formatDate(d.intake_date || d.created_at)}</td>
+  </tr>`;
+}
+
+function stageChangeRow(h, dealById) {
+  const d = dealById[h.deal_id];
+  if (!d) return '';
+  return `<tr ${goTo(d.id)}>
+    <td>${escapeHtml(d.deal_name)}</td>
+    <td>${stageBadge(h.stage)}</td>
+    <td>${formatDateTime(h.changed_at)}</td>
+    <td>${escapeHtml(h.changed_by || '-')}</td>
+  </tr>`;
+}
+
+function decisionRow(h, dealById) {
+  const d = dealById[h.deal_id];
+  if (!d) return '';
+  const reasonNote = h.stage === '패스' && d.pass_reason
+    ? ` <span class="text-muted">(${escapeHtml(d.pass_reason)})</span>` : '';
+  return `<tr ${goTo(d.id)}>
+    <td>${escapeHtml(d.deal_name)}</td>
+    <td>${stageBadge(h.stage)}${reasonNote}</td>
+    <td>${formatDateTime(h.changed_at)}</td>
+    <td>${escapeHtml(h.changed_by || '-')}</td>
+  </tr>`;
+}
+
+function needsDecisionRow(d) {
+  return `<tr ${goTo(d.id)}>
+    <td>${escapeHtml(d.deal_name)}</td>
+    <td>${escapeHtml(d.assigned_to)}</td>
+    <td>${formatDate(d.intake_date || d.created_at)}</td>
+    <td>${nextActionSummaryHTML(d)}</td>
+  </tr>`;
+}
+
+function overdueRow(d) {
+  return `<tr ${goTo(d.id)}>
+    <td>${escapeHtml(d.deal_name)}</td>
+    <td>${escapeHtml(d.next_action)}</td>
+    <td>${escapeHtml(d.next_action_owner || '미지정')}</td>
+    <td>${nextActionDueHTML(d.next_action_due)}</td>
+  </tr>`;
+}
+
+// ── 전체 렌더링 ────────────────────────────────────────────────
+
+function render(data) {
+  const { newIntakes, stageChanges, decisions, needsDecision, overdue, dealById } = data;
+
+  const html = [
+    sectionCard('fa-inbox', '이번 주 신규 접수', newIntakes.length,
+      reportTable(['딜명', '자산군', '담당자', '인입일'],
+        newIntakes.map(intakeRow), '이번 주 신규 접수된 딜이 없습니다.')),
+
+    sectionCard('fa-right-left', '이번 주 단계 변경', stageChanges.length,
+      reportTable(['딜명', '변경된 단계', '변경일시', '변경자'],
+        stageChanges.map(h => stageChangeRow(h, dealById)), '이번 주 단계가 바뀐 딜이 없습니다.')),
+
+    sectionCard('fa-gavel', '이번 주 결정 (투자확정·패스)', decisions.length,
+      reportTable(['딜명', '결정', '결정일시', '결정자'],
+        decisions.map(h => decisionRow(h, dealById)), '이번 주 투자확정·패스로 결정된 딜이 없습니다.')),
+
+    sectionCard('fa-triangle-exclamation', '결정 필요 (IC 단계)', needsDecision.length,
+      reportTable(['딜명', '담당자', '인입일', '다음 액션'],
+        needsDecision.map(needsDecisionRow), '투자심의위원회 단계에 있는 딜이 없습니다.'),
+      '이번 주 집계가 아니라 지금 시점에 IC 단계에 있는 딜 전체입니다.'),
+
+    sectionCard('fa-clock', '기한 초과 다음 액션', overdue.length,
+      reportTable(['딜명', '다음 액션', '담당자', '기한'],
+        overdue.map(overdueRow), '기한이 지난 다음 액션이 없습니다.'),
+      '이번 주 집계가 아니라 지금 시점에 기한이 지난 딜 전체입니다.'),
+  ].join('');
+
+  document.getElementById('reportBody').innerHTML = html;
+}
+
+function changeWeek(offsetOrDelta) {
+  weekOffset = (offsetOrDelta === 0) ? 0 : weekOffset + offsetOrDelta;
+  loadReport();
+}
+
+renderNav('report');
+loadReport();
+</script>
+</body>
+</html>

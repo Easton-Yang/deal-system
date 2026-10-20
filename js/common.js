@@ -654,64 +654,12 @@ function updateCurrentUserInSidebar() {
     '<i class="fas fa-sign-out-alt"></i></button>';
 }
 
-// Supabase 데이터 마이그레이션 (한 번만 실행)
-async function migrateDataToSupabase() {
-  if (DEMO_MODE || !SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) return;
-  if (sessionStorage.getItem('migration_done')) return;
-
-  try {
-    const supabase = getSB();
-
-    // deals 테이블에 데이터가 있는지 확인
-    const { count: dealCount } = await supabase
-      .from('deals')
-      .select('*', { count: 'exact', head: true });
-
-    if (dealCount > 0) {
-      sessionStorage.setItem('migration_done', 'true');
-      return; // 이미 데이터가 있음
-    }
-
-    // seed-data 로드
-    const deals = DEMO_DEALS_SEED || [];
-    const notes = DEMO_NOTES_SEED || [];
-    const history = DEMO_STAGE_HISTORY_SEED || [];
-
-    // deals 일괄 삽입 (1000개씩 청크)
-    if (deals.length > 0) {
-      for (let i = 0; i < deals.length; i += 1000) {
-        const chunk = deals.slice(i, i + 1000);
-        const { error } = await supabase.from('deals').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    // notes 일괄 삽입
-    if (notes.length > 0) {
-      for (let i = 0; i < notes.length; i += 1000) {
-        const chunk = notes.slice(i, i + 1000);
-        const { error } = await supabase.from('deal_notes').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    // history 일괄 삽입
-    if (history.length > 0) {
-      for (let i = 0; i < history.length; i += 1000) {
-        const chunk = history.slice(i, i + 1000);
-        const { error } = await supabase.from('deal_stage_history').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    sessionStorage.setItem('migration_done', 'true');
-    console.log('✓ Supabase 데이터 마이그레이션 완료');
-  } catch (err) {
-    console.error('Supabase 마이그레이션 오류:', err.message);
-  }
-}
-
 // 수동 데이터 마이그레이션 (관리자용)
+// [2026-10] 페이지가 열릴 때마다 자동으로 시도하던 버전은 없앴습니다.
+// 최초 247건 업로드가 이미 끝난 뒤로는 호출할 때마다 deals 테이블에 데이터가
+// 있는지부터 확인해 그냥 돌아가는 것뿐인데, 로그인 전 화면(anon)에서는 그
+// 확인 쿼리 자체가 RLS에 막혀 매번 콘솔에 에러만 남겼습니다. 최초 업로드가
+// 필요하면 이 아래 함수를 admin.html의 버튼으로 수동 실행하면 됩니다.
 async function manualMigrateDataToSupabase() {
   if (DEMO_MODE) {
     alert('데모 모드에서는 마이그레이션을 수행할 수 없습니다.');
@@ -812,5 +760,4 @@ if (!DEMO_MODE && currentPageName() !== 'login.html') {
 //   그래서 '보안설정_SQL.sql' 실행이 반드시 필요합니다.
 window.addEventListener('load', () => {
   updateCurrentUserInSidebar();
-  migrateDataToSupabase();
 });

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>딜 관리 시스템 - 관리</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link href="vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="vendor/fontawesome/css/all.min.css" rel="stylesheet">
   <style>
@@ -71,7 +72,12 @@
   <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script src="vendor/supabase/supabase.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/seed-data.js"></script>
+  <script>
+    // 라이브 모드에서는 실제 딜 데이터가 담긴 seed-data.js를 아예 내려받지
+    // 않습니다. 로그인 전 화면에서도 받아가던 파일이라, 대외비 데이터 노출을
+    // 막기 위해 데모 모드일 때만 불러옵니다.
+    if (DEMO_MODE) document.write('<script src="js/seed-data.js"><\/script>');
+  </script>
   <script src="js/common.js"></script>
 
   <script>

@@ -9,6 +9,29 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-8.0  2026-10-26  투자조건 구조화 1단계: 투자수단·통화·검토금액·만기·
+//                         기대수익률·투자논거·주요위험 추가. 1차검토 단계부터
+//                         상세화면에 노출(접수 단계엔 숨김). 자산군 10종 분류는
+//                         유지. deals 테이블 컬럼 추가라 앞자리 올림
+//   Beta-7.1  2026-10-19  보안: 라이브 모드에서 seed-data.js(실제 딜 247건) 전송
+//                         차단. 로그인 전 화면에서도 무조건 내려가고 있었음.
+//                         더 안 쓰는 자동 마이그레이션 함수도 제거. 뒷자리 +1
+//   Beta-7.0  2026-10-19  '주간보고' 화면 추가: 이번 주 신규접수·단계변경·결정·
+//                         IC 결정대기·기한초과 다음액션을 한 화면에 모으고
+//                         인쇄/PDF 내보내기 지원. 화면 추가라 앞자리 올림
+//   Beta-6.1  2026-10-19  진행경과 기간 계산 정비: 엑셀이관 구간은 '기간 미상'
+//                         으로 표시하고 계산에서 제외, 1일 미만은 시간 단위로
+//                         표시, 투자확정·패스는 결정일에 경과 집계를 멈춤.
+//                         화면 로직 수정이라 뒷자리 +1
+//   Beta-6.0  2026-10-19  딜을 "패스"로 바꿀 때 사유(가격/구조/신용/한도/일정/
+//                         기타)·상세메모·재검토 조건을 기록하도록 추가.
+//                         deals 테이블 컬럼 추가라 앞자리 올림
+//   Beta-5.0  2026-10-19  딜 "단계"와 별개로 "상태"(진행/외부회신 대기/보류/종결)
+//                         추가. 상세·목록·칸반·대시보드 반영. deals 테이블
+//                         컬럼 추가라 앞자리 올림
+//   Beta-4.0  2026-10-19  딜별 "다음 액션·기한" 추가(담당자/기한/대기사유),
+//                         대시보드에 '내가 처리할 딜'·'기한 임박·초과' 추가.
+//                         deals 테이블 컬럼 4개 추가라 앞자리 올림
 //   Beta-3.1  2026-10-19  첨부파일 다운로드 버튼 추가(없어서 올린 파일을 꺼낼 수
 //                         없었음). 단계 이력·파일 삭제가 오류를 무시하던 문제 수정
 //   Beta-3.0  2026-10-19  딜 목록에서 담당자 일괄 변경 (여러 건 선택 → 한 번에 지정).
@@ -18,7 +41,13 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-3.1';
+//   Beta-9.0  2026-10-26  텔레그램 딜 접수 추가: 담당자가 텔레그램 봇에게 메시지를
+//                         보내면 AI가 딜 항목을 분석해 '초안'으로 저장하고
+//                         (deal_drafts 테이블, api/telegram-webhook.js), 담당자가
+//                         '텔레그램 접수' 화면에서 확인·수정 후 등록해야 실제 딜이
+//                         생성됨(AI가 자동 등록하지 않음). 화면·테이블·서버 함수
+//                         추가라 앞자리 올림
+const APP_VERSION = 'Beta-9.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -29,6 +58,28 @@ const ASSET_CLASSES = ['PE/VC', '부동산', '인프라', '사모크레딧',
 const INTAKE_CHANNELS = ['이메일', '카카오톡', '텔레그램', '기타'];
 const FINAL_RESULTS = ['투자', '패스', '보류'];
 const UNASSIGNED = '미배정';   // 담당자 미지정 딜 (엑셀 이관분 등)
+
+// 검토 상태: 단계(STAGES)와 별개로, 실제로 움직이고 있는지를 나타냅니다.
+// 오래된 딜이 단계만으로는 '지금 멈춰 있는지' 구분되지 않는 문제를 막기 위함.
+const REVIEW_STATUSES = ['진행', '외부회신 대기', '보류', '종결'];
+const DEFAULT_REVIEW_STATUS = '진행';
+
+const REVIEW_STATUS_BADGE = {
+  '진행':        'bg-light text-dark border',
+  '외부회신 대기': 'bg-warning text-dark',
+  '보류':        'bg-secondary',
+  '종결':        'bg-dark'
+};
+
+// 딜을 '패스'로 바꿀 때 고르는 사유 분류. 자유 메모(pass_reason_note)와
+// 재검토 조건(reconsider_condition)은 별도 자유 입력 칸입니다.
+const PASS_REASONS = ['가격', '구조', '신용', '한도', '일정', '기타'];
+
+// 투자조건(1단계, 공통 필드만). 자산별 추가 항목(담보·LTV, 보수·캐리 등)은
+// 아직 구조화하지 않았고, '핵심 투자논거'·'주요 위험' 자유 텍스트로 대신합니다.
+// 접수 단계에서는 안 보이고 1차검토 단계부터 상세화면에 노출됩니다.
+const INVESTMENT_VEHICLES = ['대출', '사채', '보통주', '우선주', 'CB', '펀드지분', '기타'];
+const CURRENCIES = ['KRW', 'USD', 'EUR', 'JPY', '기타'];
 
 const STAGE_BADGE = {
   '접수':    'bg-secondary',
@@ -67,6 +118,9 @@ function initDemoData() {
   }
   if (!localStorage.getItem('files_v3')) {
     localStorage.setItem('files_v3', JSON.stringify([]));
+  }
+  if (!localStorage.getItem('deal_drafts_v1')) {
+    localStorage.setItem('deal_drafts_v1', JSON.stringify(DEMO_DEAL_DRAFTS_SEED));
   }
 }
 
@@ -137,7 +191,7 @@ async function getDeal(id) {
 async function createDeal(data) {
   if (DEMO_MODE) {
     const deals = demoGet('deals_v3');
-    const newDeal = { ...data, id: demoId(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newDeal = { review_status: DEFAULT_REVIEW_STATUS, ...data, id: demoId(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     deals.unshift(newDeal);
     demoSet('deals_v3', deals);
     await addStageHistory(newDeal.id, newDeal.current_stage || '접수', currentUserName());
@@ -197,6 +251,64 @@ async function bulkUpdateAssignee(ids, assignee) {
   return n;
 }
 
+// ── 텔레그램 딜 초안 (Beta-9.0) ──────────────────────────────────
+// 텔레그램 봇이 받은 메시지를 AI가 분석해 만든 '초안'입니다. 초안을
+// 만드는 쪽(api/telegram-webhook.js)은 service_role 키로 직접 DB에
+// 쓰므로, 여기(브라우저)는 조회와 확인(등록/반려)만 합니다.
+async function getDealDrafts(status) {
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const filtered = status ? drafts.filter(d => d.status === status) : drafts;
+    return filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+  let q = getSB().from('deal_drafts').select('*').order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data;
+}
+
+// 초안을 확인해 실제 딜로 등록합니다. dealData 는 담당자가 화면에서
+// 고친 최종 값입니다(AI가 뽑은 값을 그대로 쓸 수도, 고칠 수도 있습니다).
+async function confirmDraft(draftId, dealData) {
+  const created = await createDeal(dealData);
+  const now = new Date().toISOString();
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const idx = drafts.findIndex(d => d.id === draftId);
+    if (idx !== -1) {
+      drafts[idx] = { ...drafts[idx], status: '등록완료', created_deal_id: created.id,
+        reviewed_by: currentUserName(), reviewed_at: now };
+      demoSet('deal_drafts_v1', drafts);
+    }
+    return created;
+  }
+  const { error } = await getSB().from('deal_drafts')
+    .update({ status: '등록완료', created_deal_id: created.id, reviewed_by: currentUserName(), reviewed_at: now })
+    .eq('id', draftId);
+  if (error) throw error;
+  return created;
+}
+
+// 초안을 반려합니다 (딜로 만들지 않음). 사유는 선택 사항입니다.
+async function rejectDraft(draftId, reason) {
+  const now = new Date().toISOString();
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const idx = drafts.findIndex(d => d.id === draftId);
+    if (idx !== -1) {
+      drafts[idx] = { ...drafts[idx], status: '반려', reject_reason: reason || null,
+        reviewed_by: currentUserName(), reviewed_at: now };
+      demoSet('deal_drafts_v1', drafts);
+    }
+    return;
+  }
+  const { error } = await getSB().from('deal_drafts')
+    .update({ status: '반려', reject_reason: reason || null, reviewed_by: currentUserName(), reviewed_at: now })
+    .eq('id', draftId);
+  if (error) throw error;
+}
+
 async function deleteDeal(id) {
   if (DEMO_MODE) {
     demoSet('deals_v3', demoGet('deals_v3').filter(d => d.id !== id));
@@ -226,6 +338,17 @@ async function getStageHistory(dealId) {
   }
   const { data, error } = await getSB().from('deal_stage_history')
     .select('*').eq('deal_id', dealId).order('changed_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+// 특정 시각 이후의 단계 변경 이력을 모든 딜에 걸쳐 가져옵니다 (주간 보고용).
+async function getStageHistorySince(sinceISO) {
+  if (DEMO_MODE) {
+    return demoGet('stage_history_v3').filter(h => h.changed_at >= sinceISO);
+  }
+  const { data, error } = await getSB().from('deal_stage_history')
+    .select('*').gte('changed_at', sinceISO).order('changed_at', { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -397,6 +520,42 @@ function formatCurrency(amount) {
   return `${n.toLocaleString()}원`;
 }
 
+// ── 다음 액션 기한 계산 ──────────────────────────────────────────
+
+// 오늘과 날짜 문자열의 차이(일). 미래면 양수, 지났으면 음수, 오늘이면 0.
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr); target.setHours(0,0,0,0);
+  return Math.round((target - today) / 86400000);
+}
+
+function isOverdue(dateStr) {
+  const d = daysUntil(dateStr);
+  return d !== null && d < 0;
+}
+
+// 기한을 날짜 + 지남/임박 표시로 보여줍니다 (목록·칸반·대시보드·상세 공용).
+// 인자는 날짜 값이고, formatDate()를 거치므로 별도 escape가 필요 없습니다.
+function nextActionDueHTML(dueStr) {
+  if (!dueStr) return '<span class="text-muted">-</span>';
+  const d = daysUntil(dueStr);
+  const label = formatDate(dueStr);
+  if (d < 0)  return `<span class="text-danger fw-bold">${label} (${-d}일 지남)</span>`;
+  if (d === 0) return `<span class="text-warning fw-bold">${label} (오늘)</span>`;
+  if (d <= 3) return `<span style="color:#f57c00">${label} (${d}일 후)</span>`;
+  return `<span>${label}</span>`;
+}
+
+// 목록·칸반에서 쓰는 다음 액션 한 줄 요약. 내부에서 escapeHtml 처리합니다.
+function nextActionSummaryHTML(d) {
+  if (!d.next_action) return '<span class="text-muted" style="font-size:12px">-</span>';
+  return `<div style="font-size:12px">
+    <div>${escapeHtml(d.next_action)}</div>
+    <div class="text-muted">${nextActionDueHTML(d.next_action_due)}${d.next_action_owner ? ' · ' + escapeHtml(d.next_action_owner) : ''}</div>
+  </div>`;
+}
+
 function stageBadge(stage) {
   const cls = STAGE_BADGE[stage] || 'bg-secondary';
   return `<span class="badge ${cls}">${stage}</span>`;
@@ -411,6 +570,21 @@ function resultBadge(result) {
   if (!result) return '';
   const cls = RESULT_BADGE[result] || 'bg-secondary';
   return `<span class="badge ${cls}">${result}</span>`;
+}
+
+// review_status 가 없는 딜(이 기능 이전에 만들어진 데모 데이터 등)은
+// '진행'으로 간주합니다. 라이브 DB는 컬럼에 NOT NULL DEFAULT 가 있어
+// 항상 값이 채워져 있지만, 데모 모드(localStorage)는 그렇지 않을 수 있습니다.
+function dealStatus(deal) {
+  return (deal && deal.review_status) || DEFAULT_REVIEW_STATUS;
+}
+
+// review_status 는 드롭다운으로만 고르고 DB 제약으로도 막혀 있어 고정값만
+// 들어옵니다(stageBadge 와 같은 이유로 자유 입력이 아니라 escape 불필요).
+function statusBadge(status) {
+  const s = status || DEFAULT_REVIEW_STATUS;
+  const cls = REVIEW_STATUS_BADGE[s] || 'bg-secondary';
+  return `<span class="badge ${cls}">${s}</span>`;
 }
 
 function showToast(message, type = 'success') {
@@ -439,6 +613,8 @@ function renderNav(activePage) {
     { id:'deals',     label:'딜 목록',    icon:'fa-list',           href:'deals.html' },
     { id:'kanban',    label:'칸반 보드',  icon:'fa-columns',        href:'deals.html?view=kanban' },
     { id:'portfolio', label:'진행경과',   icon:'fa-project-diagram', href:'portfolio.html' },
+    { id:'report',    label:'주간보고',   icon:'fa-file-lines',     href:'weekly-report.html' },
+    { id:'drafts',    label:'텔레그램 접수', icon:'fa-robot',       href:'deal-drafts.html' },
     { id:'new',       label:'새 딜 입력', icon:'fa-plus-circle',    href:'deal-new.html' },
   ];
 
@@ -645,64 +821,12 @@ function updateCurrentUserInSidebar() {
     '<i class="fas fa-sign-out-alt"></i></button>';
 }
 
-// Supabase 데이터 마이그레이션 (한 번만 실행)
-async function migrateDataToSupabase() {
-  if (DEMO_MODE || !SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) return;
-  if (sessionStorage.getItem('migration_done')) return;
-
-  try {
-    const supabase = getSB();
-
-    // deals 테이블에 데이터가 있는지 확인
-    const { count: dealCount } = await supabase
-      .from('deals')
-      .select('*', { count: 'exact', head: true });
-
-    if (dealCount > 0) {
-      sessionStorage.setItem('migration_done', 'true');
-      return; // 이미 데이터가 있음
-    }
-
-    // seed-data 로드
-    const deals = DEMO_DEALS_SEED || [];
-    const notes = DEMO_NOTES_SEED || [];
-    const history = DEMO_STAGE_HISTORY_SEED || [];
-
-    // deals 일괄 삽입 (1000개씩 청크)
-    if (deals.length > 0) {
-      for (let i = 0; i < deals.length; i += 1000) {
-        const chunk = deals.slice(i, i + 1000);
-        const { error } = await supabase.from('deals').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    // notes 일괄 삽입
-    if (notes.length > 0) {
-      for (let i = 0; i < notes.length; i += 1000) {
-        const chunk = notes.slice(i, i + 1000);
-        const { error } = await supabase.from('deal_notes').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    // history 일괄 삽입
-    if (history.length > 0) {
-      for (let i = 0; i < history.length; i += 1000) {
-        const chunk = history.slice(i, i + 1000);
-        const { error } = await supabase.from('deal_stage_history').insert(chunk);
-        if (error) throw error;
-      }
-    }
-
-    sessionStorage.setItem('migration_done', 'true');
-    console.log('✓ Supabase 데이터 마이그레이션 완료');
-  } catch (err) {
-    console.error('Supabase 마이그레이션 오류:', err.message);
-  }
-}
-
 // 수동 데이터 마이그레이션 (관리자용)
+// [2026-10] 페이지가 열릴 때마다 자동으로 시도하던 버전은 없앴습니다.
+// 최초 247건 업로드가 이미 끝난 뒤로는 호출할 때마다 deals 테이블에 데이터가
+// 있는지부터 확인해 그냥 돌아가는 것뿐인데, 로그인 전 화면(anon)에서는 그
+// 확인 쿼리 자체가 RLS에 막혀 매번 콘솔에 에러만 남겼습니다. 최초 업로드가
+// 필요하면 이 아래 함수를 admin.html의 버튼으로 수동 실행하면 됩니다.
 async function manualMigrateDataToSupabase() {
   if (DEMO_MODE) {
     alert('데모 모드에서는 마이그레이션을 수행할 수 없습니다.');
@@ -803,5 +927,4 @@ if (!DEMO_MODE && currentPageName() !== 'login.html') {
 //   그래서 '보안설정_SQL.sql' 실행이 반드시 필요합니다.
 window.addEventListener('load', () => {
   updateCurrentUserInSidebar();
-  migrateDataToSupabase();
 });

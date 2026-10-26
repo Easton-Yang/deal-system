@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>진행경과 – 딜 관리 시스템</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
 <link rel="stylesheet" href="css/style.css">
@@ -74,59 +75,89 @@
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script src="vendor/supabase/supabase.js"></script>
 <script src="js/config.js"></script>
-<script src="js/seed-data.js"></script>
+<script>
+  // 라이브 모드에서는 실제 딜 데이터가 담긴 seed-data.js를 아예 내려받지
+  // 않습니다. 로그인 전 화면에서도 받아가던 파일이라, 대외비 데이터 노출을
+  // 막기 위해 데모 모드일 때만 불러옵니다.
+  if (DEMO_MODE) document.write('<script src="js/seed-data.js"><\/script>');
+</script>
 <script src="js/common.js"></script>
 <script>
 // 기본 표시 단계: 패스 제외, 접수도 포함
 let visibleStages = new Set(['접수', '1차검토', '심층검토', 'IC', '투자확정']);
-let allData = []; // { deal, stageMap, totalDays }
+let allData = []; // { deal, stageMap, totalDays, excludedFromCalc, hasMigratedSegments }
 const STAGE_ACTIVE_COLOR  = '#f57c00';
 const STAGE_DONE_COLORS   = ['#3949ab','#1e88e5','#039be5','#00897b','#43a047'];
 const STAGE_PENDING_COLOR = '#e8eaf6';
 const STAGE_PASS_COLOR    = '#ef9a9a';
+
+// 엑셀에서 옮긴 과거 딜(247건)은 접수일에 1분 간격으로 단계 이력을 기록했습니다
+// (changed_by = '엑셀이관'). 그 시각 간격은 실제 소요기간이 아니라서 날짜 계산에
+// 쓰면 안 됩니다. '투자확정'·'패스'는 결정이 내려진 시점이라, 그 뒤로 오늘까지
+// 시간이 계속 흐르는 것처럼 '진행 중'으로 세지 않습니다(검토는 결정일에 끝남).
+const EXCEL_MIGRATION_AUTHOR = '엑셀이관';
+const TERMINAL_STAGES = ['투자확정', '패스'];
+
+// 1일 미만이면 "N시간", 그 외엔 "N일"로 — 1분 차이를 전부 '1일'로 부풀리지 않습니다.
+function formatDuration(days) {
+  if (days < 1) return `${Math.max(1, Math.round(days * 24))}시간`;
+  return `${Math.round(days)}일`;
+}
 
 // ── 타임라인 계산 ──────────────────────────────────────────────
 
 async function buildTimelineData(deal) {
   const history = await getStageHistory(deal.id);
   const now = new Date();
-  const stageMap = {}; // stage -> { enteredAt, days, isCurrent, isPast }
+  const stageMap = {}; // stage -> { enteredAt, days, isMigrated, isCurrent, isDecided, isPast }
 
   const sorted = [...history].sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at));
+  let hasMigratedSegments = false;
 
   sorted.forEach((h, i) => {
-    const entered  = new Date(h.changed_at);
-    const next     = sorted[i + 1];
-    const exitDate = next ? new Date(next.changed_at) : now;
-    const days     = Math.max(1, Math.ceil((exitDate - entered) / 86400000));
+    const entered    = new Date(h.changed_at);
+    const next       = sorted[i + 1];
+    const isMigrated = h.changed_by === EXCEL_MIGRATION_AUTHOR;
+    const isDecided  = !next && TERMINAL_STAGES.includes(h.stage);
+    // 결정 단계는 결정 시점에서 끝난 것으로 보고, 그 뒤 경과는 세지 않습니다.
+    const exitDate   = isDecided ? entered : (next ? new Date(next.changed_at) : now);
+    if (isMigrated) hasMigratedSegments = true;
+
     stageMap[h.stage] = {
       enteredAt: h.changed_at,
-      days,
-      isCurrent: !next && h.stage === deal.current_stage,
-      isPast:    !!next
+      days: isMigrated ? null : (exitDate - entered) / 86400000,
+      isMigrated,
+      isCurrent: !next && !isDecided && h.stage === deal.current_stage,
+      isDecided,
+      isPast: !!next
     };
   });
 
   // 이력 없으면 intake_date 기준 현재 단계만 표시
   if (sorted.length === 0) {
     const start = new Date(deal.intake_date || deal.created_at);
-    const days  = Math.max(1, Math.ceil((now - start) / 86400000));
     stageMap[deal.current_stage] = {
       enteredAt: deal.intake_date || deal.created_at,
-      days, isCurrent: true, isPast: false
+      days: (now - start) / 86400000,
+      isMigrated: false, isCurrent: true, isDecided: false, isPast: false
     };
   }
 
-  // 패스 경우 패스 단계 색상 별도 처리
-  const totalDays = Object.values(stageMap).reduce((s, v) => s + v.days, 0);
-  return { deal, stageMap, totalDays };
+  // 결정 단계(투자확정/패스)는 '머문 기간'이 없는 한 시점이라 합계에 넣지 않습니다.
+  // 엑셀이관 구간도 제외합니다. 남는 게 하나도 없으면(예: 이관 접수 → 바로 패스)
+  // 실제 걸린 기간을 알 방법이 없다는 뜻이라, 숫자를 지어내지 않고 제외 처리합니다.
+  const measurable = Object.values(stageMap).filter(v => v.days !== null && !v.isDecided);
+  const totalDays = measurable.reduce((s, v) => s + v.days, 0);
+  const excludedFromCalc = measurable.length === 0;
+  return { deal, stageMap, totalDays, excludedFromCalc, hasMigratedSegments };
 }
 
 // ── 타임라인 카드 렌더링 ───────────────────────────────────────
 
 function renderTimelineCard(item) {
-  const { deal, stageMap, totalDays } = item;
+  const { deal, stageMap, totalDays, excludedFromCalc, hasMigratedSegments } = item;
   const isPass = deal.current_stage === '패스';
+  const isTerminalDeal = TERMINAL_STAGES.includes(deal.current_stage);
 
   // 단계 바 생성 (접수~투자확정 또는 패스까지)
   const displayStages = isPass ? STAGES : STAGES.filter(s => s !== '패스');
@@ -141,27 +172,43 @@ function renderTimelineCard(item) {
       </div>`;
     }
 
-    const pct = totalDays > 0 ? Math.max(info.days / totalDays, 0.04) : 0.1;
+    const pct = (info.days != null && totalDays > 0) ? Math.max(info.days / totalDays, 0.04) : 0.08;
     let bgColor;
-    if (isPass && stage === '패스') bgColor = STAGE_PASS_COLOR;
+    if (isPass && stage === '패스')  bgColor = STAGE_PASS_COLOR;
+    else if (info.isMigrated)        bgColor = '#bdbdbd';
     else if (info.isCurrent)         bgColor = STAGE_ACTIVE_COLOR;
     else                             bgColor = STAGE_DONE_COLORS[stageIdx % STAGE_DONE_COLORS.length];
-    const textColor = info.isCurrent || bgColor === STAGE_PASS_COLOR ? '#fff' : '#fff';
+    const textColor = '#fff';
 
-    const daysLabel = info.isCurrent
-      ? `${info.days}일째 ▶`
-      : `${info.days}일`;
+    let segLabel, titlePhrase;
+    if (info.isMigrated) {
+      segLabel = '기간 미상';
+      titlePhrase = '엑셀 이관 데이터라 실제 소요기간을 알 수 없음';
+    } else if (info.isDecided) {
+      segLabel = '결정';
+      titlePhrase = `결정 (${formatDateTime(info.enteredAt)})`;
+    } else if (info.isCurrent) {
+      segLabel = `${formatDuration(info.days)}째 ▶`;
+      titlePhrase = `진행 중 ${formatDuration(info.days)} (${formatDateTime(info.enteredAt)} 진입)`;
+    } else {
+      segLabel = formatDuration(info.days);
+      titlePhrase = `${formatDuration(info.days)} 소요 (${formatDateTime(info.enteredAt)} 진입)`;
+    }
 
     return `<div class="tl-seg" style="flex:${pct};min-width:40px;background:${bgColor};color:${textColor}"
-      title="${stage}: ${info.isCurrent ? '진행 중 ' : ''}${info.days}일 (${formatDateTime(info.enteredAt)})">
+      title="${stage}: ${titlePhrase}">
       <div class="tl-seg-label">${stage}</div>
-      <div class="tl-seg-days">${daysLabel}</div>
+      <div class="tl-seg-days">${segLabel}</div>
     </div>`;
   }).join('');
 
   const intakeDate   = deal.intake_date ? deal.intake_date : deal.created_at.split('T')[0];
-  const totalLabel   = isPass ? `총 ${totalDays}일 소요` : `진행 ${totalDays}일째`;
-  const headerColor  = isPass ? '#c62828' : '#1a237e';
+  const headerColor  = isPass ? '#c62828' : (deal.current_stage === '투자확정' ? '#2e7d32' : '#1a237e');
+
+  const totalNum   = excludedFromCalc ? '—' : (totalDays < 1 ? Math.max(1, Math.round(totalDays*24)) : Math.round(totalDays));
+  const totalLabel = excludedFromCalc
+    ? '기간 산출 제외'
+    : (totalDays < 1 ? '시간' : '일') + (isTerminalDeal ? ' 소요' : '째 진행');
 
   return `
     <div class="tl-card" onclick="location.href='deal-detail.html?id=${deal.id}'" title="클릭하여 딜 상세 보기">
@@ -176,10 +223,17 @@ function renderTimelineCard(item) {
             ${deal.deal_size ? `<span class="text-muted"><i class="fas fa-won-sign me-1"></i>${formatCurrency(deal.deal_size)}</span>` : ''}
             <span class="text-muted"><i class="fas fa-calendar me-1"></i>인입 ${intakeDate}</span>
           </div>
+          ${excludedFromCalc ? `
+          <div class="text-muted" style="font-size:11px;margin-top:4px">
+            <i class="fas fa-triangle-exclamation me-1"></i>엑셀 이관 데이터라 실제 소요기간을 알 수 없어 기간 계산에서 제외했습니다.
+          </div>` : (hasMigratedSegments ? `
+          <div class="text-muted" style="font-size:11px;margin-top:4px">
+            <i class="fas fa-circle-info me-1"></i>엑셀 이관 구간(회색)은 기간 계산에서 제외했습니다.
+          </div>` : '')}
         </div>
         <div class="tl-total" style="color:${headerColor}">
-          <div class="tl-total-num">${totalDays}</div>
-          <div class="tl-total-label">${isPass ? '소요일' : '진행일'}</div>
+          <div class="tl-total-num">${totalNum}</div>
+          <div class="tl-total-label">${totalLabel}</div>
         </div>
       </div>
       <div class="tl-bar-wrap">

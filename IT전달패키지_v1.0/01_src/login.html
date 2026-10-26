@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>딜 관리 시스템 - 로그인</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link href="vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
   <link href="vendor/fontawesome/css/all.min.css" rel="stylesheet">
   <style>
@@ -24,7 +25,7 @@
       padding: 40px;
     }
     .login-header { text-align: center; margin-bottom: 30px; }
-    .login-header i { font-size: 48px; color: #667eea; margin-bottom: 10px; }
+    .login-header img { width: 190px; max-width: 80%; height: auto; margin-bottom: 14px; }
     .login-header h1 { font-size: 28px; font-weight: 700; margin: 10px 0 5px; color: #333; }
     .login-header p { color: #999; font-size: 14px; }
     .form-control { border-radius: 8px; border: 1px solid #ddd; padding: 12px 15px; font-size: 14px; }
@@ -44,7 +45,7 @@
 <body>
   <div class="login-container">
     <div class="login-header">
-      <i class="fas fa-briefcase"></i>
+      <img src="img/woongjin-preed-logo.png" alt="Woongjin PREED Life">
       <h1>딜 관리 시스템</h1>
       <p>회사 계정으로 로그인하세요</p>
     </div>
@@ -78,7 +79,12 @@
   <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script src="vendor/supabase/supabase.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/seed-data.js"></script>
+  <script>
+    // 라이브 모드에서는 실제 딜 데이터가 담긴 seed-data.js를 아예 내려받지
+    // 않습니다. 로그인 전 화면에서도 받아가던 파일이라, 대외비 데이터 노출을
+    // 막기 위해 데모 모드일 때만 불러옵니다.
+    if (DEMO_MODE) document.write('<script src="js/seed-data.js"><\/script>');
+  </script>
   <script src="js/common.js"></script>
 
   <script>

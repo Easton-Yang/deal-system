@@ -41,7 +41,13 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-8.0';
+//   Beta-9.0  2026-10-26  텔레그램 딜 접수 추가: 담당자가 텔레그램 봇에게 메시지를
+//                         보내면 AI가 딜 항목을 분석해 '초안'으로 저장하고
+//                         (deal_drafts 테이블, api/telegram-webhook.js), 담당자가
+//                         '텔레그램 접수' 화면에서 확인·수정 후 등록해야 실제 딜이
+//                         생성됨(AI가 자동 등록하지 않음). 화면·테이블·서버 함수
+//                         추가라 앞자리 올림
+const APP_VERSION = 'Beta-9.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -112,6 +118,9 @@ function initDemoData() {
   }
   if (!localStorage.getItem('files_v3')) {
     localStorage.setItem('files_v3', JSON.stringify([]));
+  }
+  if (!localStorage.getItem('deal_drafts_v1')) {
+    localStorage.setItem('deal_drafts_v1', JSON.stringify(DEMO_DEAL_DRAFTS_SEED));
   }
 }
 
@@ -240,6 +249,64 @@ async function bulkUpdateAssignee(ids, assignee) {
     n += (data || []).length;
   }
   return n;
+}
+
+// ── 텔레그램 딜 초안 (Beta-9.0) ──────────────────────────────────
+// 텔레그램 봇이 받은 메시지를 AI가 분석해 만든 '초안'입니다. 초안을
+// 만드는 쪽(api/telegram-webhook.js)은 service_role 키로 직접 DB에
+// 쓰므로, 여기(브라우저)는 조회와 확인(등록/반려)만 합니다.
+async function getDealDrafts(status) {
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const filtered = status ? drafts.filter(d => d.status === status) : drafts;
+    return filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+  let q = getSB().from('deal_drafts').select('*').order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data;
+}
+
+// 초안을 확인해 실제 딜로 등록합니다. dealData 는 담당자가 화면에서
+// 고친 최종 값입니다(AI가 뽑은 값을 그대로 쓸 수도, 고칠 수도 있습니다).
+async function confirmDraft(draftId, dealData) {
+  const created = await createDeal(dealData);
+  const now = new Date().toISOString();
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const idx = drafts.findIndex(d => d.id === draftId);
+    if (idx !== -1) {
+      drafts[idx] = { ...drafts[idx], status: '등록완료', created_deal_id: created.id,
+        reviewed_by: currentUserName(), reviewed_at: now };
+      demoSet('deal_drafts_v1', drafts);
+    }
+    return created;
+  }
+  const { error } = await getSB().from('deal_drafts')
+    .update({ status: '등록완료', created_deal_id: created.id, reviewed_by: currentUserName(), reviewed_at: now })
+    .eq('id', draftId);
+  if (error) throw error;
+  return created;
+}
+
+// 초안을 반려합니다 (딜로 만들지 않음). 사유는 선택 사항입니다.
+async function rejectDraft(draftId, reason) {
+  const now = new Date().toISOString();
+  if (DEMO_MODE) {
+    const drafts = demoGet('deal_drafts_v1');
+    const idx = drafts.findIndex(d => d.id === draftId);
+    if (idx !== -1) {
+      drafts[idx] = { ...drafts[idx], status: '반려', reject_reason: reason || null,
+        reviewed_by: currentUserName(), reviewed_at: now };
+      demoSet('deal_drafts_v1', drafts);
+    }
+    return;
+  }
+  const { error } = await getSB().from('deal_drafts')
+    .update({ status: '반려', reject_reason: reason || null, reviewed_by: currentUserName(), reviewed_at: now })
+    .eq('id', draftId);
+  if (error) throw error;
 }
 
 async function deleteDeal(id) {
@@ -547,6 +614,7 @@ function renderNav(activePage) {
     { id:'kanban',    label:'칸반 보드',  icon:'fa-columns',        href:'deals.html?view=kanban' },
     { id:'portfolio', label:'진행경과',   icon:'fa-project-diagram', href:'portfolio.html' },
     { id:'report',    label:'주간보고',   icon:'fa-file-lines',     href:'weekly-report.html' },
+    { id:'drafts',    label:'텔레그램 접수', icon:'fa-robot',       href:'deal-drafts.html' },
     { id:'new',       label:'새 딜 입력', icon:'fa-plus-circle',    href:'deal-new.html' },
   ];
 

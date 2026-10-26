@@ -25,11 +25,14 @@
 | `deal-detail.html` | 상세: 편집, 단계 바, 메모, 첨부, 단계 이력 |
 | `portfolio.html` | 진행경과: 딜별 단계 소요일 타임라인 |
 | `weekly-report.html` | 주간보고: 이번 주 신규접수·단계변경·결정 + IC 결정대기·기한초과 스냅샷, 인쇄/PDF |
+| `deal-drafts.html` | 텔레그램 접수 확인: AI가 분석한 초안을 담당자가 확인·수정 후 딜로 등록/반려 (2026-10-26 추가) |
+| `api/telegram-webhook.js` | 텔레그램 봇 웹훅(Vercel 서버 함수). 메시지 수신 → Claude API로 항목 추출 → `deal_drafts`에 저장 → 텔레그램 답장. service_role 키 사용 |
 | `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, LOGIN_EMAIL_DOMAIN |
 | `js/common.js` | 상수, 데이터 접근 함수(데모=localStorage / 라이브=Supabase), 유틸, 사이드바 |
 | `js/seed-data.js` | 데모 초기 데이터: 실제 딜 247건 (아래 참고) |
 | `딜관리시스템_DB스키마.sql` | DB 스키마 원본 (패키지의 `02_db/01_schema.sql`과 동일) |
 | `보안설정_SQL.sql` | **보안 잠금 SQL.** users 테이블 삭제 + RLS를 로그인 사용자 전용으로. 사용자가 Supabase SQL Editor에 붙여넣어 1회 실행 |
+| `텔레그램접수_테이블추가_SQL.sql` | `deal_drafts` 테이블 신규 생성 + RLS. 사용자가 Supabase SQL Editor에서 1회 실행 (2026-10-26 추가, 아직 미실행) |
 | `딜관리시스템_기능요구사항명세서_v1.0.docx` | IT 전달용 명세서 (`tools/windows/gen_frd.ps1`로 생성) |
 | `tools/check_xss.py` | escape 누락 전수 검사 (Python만 필요) |
 | `tools/make_package.py` | IT 전달 패키지 `01_src/` 재생성 + CDN 치환 검사 (맥 공통) |
@@ -53,6 +56,27 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
   - 현재 `Beta-7.1` (2026-10-20 라이브 모드 seed-data.js 비노출 처리. 보안 수정이라 뒷자리).
     두 세션이 독립적으로 Beta-3대까지 번호를 올려 병합 시 번호를 다시 매겼습니다.
     자세한 변경 내역은 `js/common.js` 상단 표를 보세요(이 파일에는 전체를 옮겨 적지 않습니다).
+
+- **텔레그램 딜 접수** (2026-10-26 추가). 사용자가 "담당자가 텔레그램으로 메시지를 보내면 AI가
+  분석해서 정리해주면 좋겠다"고 요청해 만들었습니다. 구조:
+  1. 담당자가 전용 텔레그램 봇에게 딜 내용을 메시지로 보냅니다.
+  2. 텔레그램이 `api/telegram-webhook.js`(Vercel 서버 함수)를 호출합니다.
+  3. 이 함수가 Claude API(Anthropic)로 메시지를 분석해 딜명·자산군·규모 등을 뽑아내고,
+     `deal_drafts` 테이블에 **초안**으로 저장합니다(라이브 테이블엔 아직 안 들어감).
+  4. 담당자가 `deal-drafts.html`("텔레그램 접수" 메뉴) 화면에서 AI가 뽑은 값을 확인·수정한 뒤
+     "딜로 등록"을 눌러야 비로소 실제 딜이 됩니다. "반려"를 누르면 딜이 되지 않습니다.
+  - **AI가 자동으로 딜을 만들지 않습니다.** 분석이 틀릴 수 있다는 전제로, 사람 확인을 반드시
+    거치도록 설계했습니다(사용자가 이 방식으로 하자고 확정, 2026-10-26).
+  - 이 기능은 **아직 작동하지 않습니다.** 코드는 다 만들었지만, 아래 "남은 일"의 외부 설정
+    (봇 생성, API 키, Vercel 환경변수, `텔레그램접수_테이블추가_SQL.sql` 실행)을 사용자가
+    직접 해야 합니다. 그 전까지 "텔레그램 접수" 화면은 항상 "대기 중인 초안 없음"으로 보입니다.
+  - 비용·스팸 방지로 `ALLOWED_TELEGRAM_USER_IDS` 환경변수에 등록된 텔레그램 ID만 받습니다.
+    봇에게 `/myid`를 보내면 본인 ID를 알려줍니다.
+  - 서버 함수는 `@supabase/supabase-js` 같은 npm 패키지 없이 순수 `fetch`로 Telegram·Anthropic·
+    Supabase REST API를 직접 호출합니다(이 프로젝트의 "빌드 도구 없음" 기조를 서버 함수에도
+    유지하기 위함. `package.json`이 없어도 Vercel이 그대로 배포합니다).
+  - 데모 모드에서는 `js/seed-data.js`의 `DEMO_DEAL_DRAFTS_SEED`(예시 2건)로 화면을 바로
+    체험할 수 있습니다. 라이브 모드는 실제 텔레그램 연동 전까지 비어 있습니다.
 
 - **담당자 일괄 변경** (2026-10-19 추가, `deals.html` 목록 뷰). 247건을 한 건씩 편집하지 않고
   여러 건을 골라 한 번에 바꿉니다. `common.js`의 `bulkUpdateAssignee(ids, assignee)`가
@@ -258,6 +282,31 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 9. **투자조건 구조화·자산군 재정의**(사용자가 함께 제시한 분석 문서의 4순위 항목)는
    아직 시작 안 함. 먼저 "자산군(투자 대상) vs 투자수단"을 어떻게 나눌지 결정이 필요하고,
    바꾸면 `ASSET_CLASSES`·DB 제약·명세서 세 곳을 함께 고쳐야 하는 큰 작업입니다.
+10. ⬜ **텔레그램 딜 접수 — 외부 설정 (사용자가 직접, 코드는 완성)**. 담당자가 텔레그램으로
+    보낸 메시지를 AI가 정리하는 기능(위 "텔레그램 딜 접수" 항목)은 코드는 다 됐지만,
+    아래를 사용자가 직접 설정해야 실제로 작동합니다. 순서대로 하세요.
+    1. ⬜ **Supabase에서 테이블 만들기**: `텔레그램접수_테이블추가_SQL.sql` 전체를
+       Supabase SQL Editor에 붙여넣고 Run (다른 보안 SQL과 같은 방법).
+    2. ⬜ **텔레그램 봇 만들기**: 텔레그램 앱에서 `@BotFather` 검색 → `/newbot` → 이름 정하기
+       → 봇 토큰(긴 문자열)을 받습니다. 이 토큰은 비밀번호와 같으니 아무에게도 보여주지 마세요.
+    3. ⬜ **Anthropic API 키 발급**: console.anthropic.com 에서 발급 (AI 분석 비용은
+       메시지 1건당 매우 소액이지만, 사용량만큼 과금됩니다).
+    4. ⬜ **Vercel에 환경변수 등록**: Vercel 대시보드 → 이 프로젝트 → Settings →
+       Environment Variables 에서 아래를 추가(모두 서버 전용이라 브라우저로 노출되지 않음):
+       `TELEGRAM_BOT_TOKEN`(2번), `TELEGRAM_WEBHOOK_SECRET`(임의의 긴 문자열, 직접 정함),
+       `ANTHROPIC_API_KEY`(3번), `SUPABASE_URL`(config.js와 동일),
+       `SUPABASE_SERVICE_ROLE_KEY`(Supabase > Settings > API), `ALLOWED_TELEGRAM_USER_IDS`
+       (허용할 텔레그램 ID, 쉼표로 구분 — 비워두면 전원 허용되니 꼭 채우세요). 등록 후 재배포.
+    5. ⬜ **텔레그램에 웹훅 등록** (터미널에서 본인 봇 토큰으로 1회 실행, 토큰은 Claude에게
+       알려주지 말고 본인이 직접 채워 넣어 실행):
+       `curl "https://api.telegram.org/bot<봇토큰>/setWebhook?url=https://deal-system-eight.vercel.app/api/telegram-webhook&secret_token=<4번의 TELEGRAM_WEBHOOK_SECRET>"`
+    6. ⬜ **본인 텔레그램 ID 확인 후 허용 목록에 추가**: 봇에게 `/myid` 전송 → 나온 번호를
+       4번의 `ALLOWED_TELEGRAM_USER_IDS`에 추가 → 재배포.
+    7. ⬜ **테스트**: 봇에게 딜 내용을 아무 문장으로 보내고, "접수했습니다" 답장이 오는지,
+       `deal-drafts.html`("텔레그램 접수" 메뉴)에 초안이 뜨는지 확인.
+    - (선택) `TELEGRAM_USER_MAP` 환경변수(JSON, 예: `{"123456789":"dongmin.yang"}`)를
+      추가하면 보낸 사람을 담당자로 자동 지정합니다. 안 넣으면 담당자는 '미배정'으로
+      뜨고 화면에서 고르면 됩니다.
 
 ## 환경 주의사항
 

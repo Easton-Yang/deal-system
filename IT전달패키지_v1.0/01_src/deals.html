@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>딜 목록 – 딜 관리 시스템</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
 <link rel="stylesheet" href="css/style.css">
@@ -51,6 +52,9 @@
       <select id="filterAssignee" class="form-select" style="width:110px">
         <option value="">담당자 전체</option>
       </select>
+      <select id="filterStatus" class="form-select" style="width:130px">
+        <option value="">상태 전체</option>
+      </select>
       <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">
         <i class="fas fa-undo me-1"></i>초기화
       </button>
@@ -95,6 +99,8 @@
                   <th>담당자</th>
                   <th>딜 규모</th>
                   <th>현재 단계</th>
+                  <th>상태</th>
+                  <th>다음 액션</th>
                   <th>최종결과</th>
                   <th style="width:60px"></th>
                 </tr>
@@ -145,10 +151,49 @@
   </div>
 </div>
 
+<!-- 패스 사유 모달 -->
+<div class="modal fade" id="passReasonModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>패스 사유</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">사유 분류</label>
+          <select id="pr_reason" class="form-select">
+            <option value="">선택 안 함</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">상세 메모</label>
+          <textarea id="pr_note" class="form-control" rows="3" placeholder="패스 사유를 구체적으로 적어주세요..."></textarea>
+        </div>
+        <div>
+          <label class="form-label">재검토 조건 (선택)</label>
+          <textarea id="pr_condition" class="form-control" rows="2" placeholder="예: 가격을 10% 낮추면 재검토"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-danger" onclick="confirmPassReason()">
+          <i class="fas fa-ban me-1"></i> 패스로 처리
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script src="vendor/supabase/supabase.js"></script>
 <script src="js/config.js"></script>
-<script src="js/seed-data.js"></script>
+<script>
+  // 라이브 모드에서는 실제 딜 데이터가 담긴 seed-data.js를 아예 내려받지
+  // 않습니다. 로그인 전 화면에서도 받아가던 파일이라, 대외비 데이터 노출을
+  // 막기 위해 데모 모드일 때만 불러옵니다.
+  if (DEMO_MODE) document.write('<script src="js/seed-data.js"><\/script>');
+</script>
 <script src="js/common.js"></script>
 <script>
 let allDeals = [];
@@ -190,10 +235,14 @@ function buildFilters() {
   [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
     const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
   });
+  const statusSel = document.getElementById('filterStatus');
+  REVIEW_STATUSES.forEach(s => {
+    const o = document.createElement('option'); o.value = o.textContent = s; statusSel.appendChild(o);
+  });
 }
 
 function resetFilters() {
-  ['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+  ['filterSearch','filterAsset','filterStage','filterAssignee','filterStatus'].forEach(id => {
     const el = document.getElementById(id);
     el.tagName === 'INPUT' ? (el.value = '') : (el.value = '');
   });
@@ -205,11 +254,13 @@ function filterDeals() {
   const asset = document.getElementById('filterAsset').value;
   const stage = document.getElementById('filterStage').value;
   const who   = document.getElementById('filterAssignee').value;
+  const status = document.getElementById('filterStatus').value;
   return allDeals.filter(d =>
-    (!q     || d.deal_name.toLowerCase().includes(q) || (d.introducer_gp||'').toLowerCase().includes(q)) &&
-    (!asset || d.asset_class === asset) &&
-    (!stage || d.current_stage === stage) &&
-    (!who   || d.assigned_to === who)
+    (!q      || d.deal_name.toLowerCase().includes(q) || (d.introducer_gp||'').toLowerCase().includes(q)) &&
+    (!asset  || d.asset_class === asset) &&
+    (!stage  || d.current_stage === stage) &&
+    (!who    || d.assigned_to === who) &&
+    (!status || dealStatus(d) === status)
   );
 }
 
@@ -249,6 +300,8 @@ function renderTable(deals) {
       <td>${escapeHtml(d.assigned_to)}</td>
       <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
       <td>${stageBadge(d.current_stage)}</td>
+      <td>${statusBadge(dealStatus(d))}</td>
+      <td>${nextActionSummaryHTML(d)}</td>
       <td>${resultBadge(d.final_result)}</td>
       <td>
         <button type="button" class="btn btn-sm btn-outline-danger js-delete-deal"
@@ -380,19 +433,22 @@ function daysSince(dateStr) {
 
 function kanbanCardHTML(d) {
   const days = daysSince(d.intake_date || d.created_at);
+  const overdue = isOverdue(d.next_action_due);
   return `
-    <div class="kanban-card"
+    <div class="kanban-card${overdue ? ' kc-overdue' : ''}"
       draggable="true"
       data-id="${d.id}"
       ondragstart="onDragStart(event,'${d.id}')"
       ondragend="onDragEnd(event)"
       onclick="location.href='deal-detail.html?id=${d.id}'">
       <div class="kc-name">${escapeHtml(d.deal_name)}</div>
-      <div class="kc-badges">${assetBadge(d.asset_class)}</div>
+      <div class="kc-badges">${assetBadge(d.asset_class)}${dealStatus(d) !== DEFAULT_REVIEW_STATUS ? ' ' + statusBadge(dealStatus(d)) : ''}</div>
       <div class="kc-meta">
         <span><i class="fas fa-user me-1"></i>${escapeHtml(d.assigned_to)}</span>
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
+      ${d.next_action ? `<div class="kc-next-action"><i class="fas fa-arrow-right me-1"></i>${escapeHtml(d.next_action)} · ${nextActionDueHTML(d.next_action_due)}</div>` : ''}
+      ${d.pass_reason ? `<div class="kc-next-action"><i class="fas fa-ban me-1"></i>패스 사유: ${escapeHtml(d.pass_reason)}</div>` : ''}
       ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
       ${d.final_result ? `<div class="mt-1">${resultBadge(d.final_result)}</div>` : ''}
     </div>`;
@@ -469,6 +525,8 @@ async function onDrop(e, newStage) {
   const deal = allDeals.find(d => d.id === dragSrcId);
   if (!deal || deal.current_stage === newStage) { dragSrcId = null; return; }
 
+  if (newStage === '패스') { openPassModal(dragSrcId); dragSrcId = null; return; }
+
   try {
     await changeStage(dragSrcId, newStage);
     deal.current_stage = newStage;
@@ -478,6 +536,50 @@ async function onDrop(e, newStage) {
     showToast('단계 변경 실패: ' + err.message, 'danger');
   }
   dragSrcId = null;
+}
+
+// ── 패스 사유 (칸반에서 '패스' 컬럼으로 드래그했을 때) ────────────
+
+let passReasonModal = null;
+let passTargetId = null;
+
+function openPassModal(dealId) {
+  passTargetId = dealId;
+  const deal = allDeals.find(d => d.id === dealId);
+  const sel = document.getElementById('pr_reason');
+  if (sel.options.length === 1) {
+    PASS_REASONS.forEach(r => {
+      const o = document.createElement('option'); o.value = o.textContent = r; sel.appendChild(o);
+    });
+  }
+  sel.value = deal.pass_reason || '';
+  document.getElementById('pr_note').value      = deal.pass_reason_note || '';
+  document.getElementById('pr_condition').value = deal.reconsider_condition || '';
+  if (!passReasonModal) passReasonModal = new bootstrap.Modal(document.getElementById('passReasonModal'));
+  passReasonModal.show();
+}
+
+async function confirmPassReason() {
+  if (!passTargetId) return;
+  const updated = {
+    current_stage:        '패스',
+    review_status:         '종결',
+    pass_reason:           document.getElementById('pr_reason').value || null,
+    pass_reason_note:      document.getElementById('pr_note').value.trim() || null,
+    reconsider_condition:  document.getElementById('pr_condition').value.trim() || null,
+  };
+  try {
+    const saved = await updateDeal(passTargetId, updated);
+    await tryAddStageHistory(passTargetId, '패스', currentUserName());
+    const idx = allDeals.findIndex(d => d.id === passTargetId);
+    if (idx !== -1) allDeals[idx] = saved;
+    passReasonModal.hide();
+    showToast(`"${escapeHtml(saved.deal_name)}" → 패스`, 'success');
+    applyFilters();
+  } catch(e) {
+    showToast('처리 실패: ' + e.message, 'danger');
+  }
+  passTargetId = null;
 }
 
 // ── 삭제 ───────────────────────────────────────────────────────
@@ -509,6 +611,7 @@ function loadUrlParams() {
   if (p.get('stage'))       document.getElementById('filterStage').value    = p.get('stage');
   if (p.get('asset_class')) document.getElementById('filterAsset').value    = p.get('asset_class');
   if (p.get('assigned_to')) document.getElementById('filterAssignee').value = p.get('assigned_to');
+  if (p.get('status'))      document.getElementById('filterStatus').value   = p.get('status');
   if (p.get('view') === 'kanban') setView('kanban');
 }
 
@@ -529,7 +632,7 @@ document.getElementById('dealsBody').addEventListener('click', function (e) {
 }, true);
 
 // 이벤트
-['filterSearch','filterAsset','filterStage','filterAssignee'].forEach(id => {
+['filterSearch','filterAsset','filterStage','filterAssignee','filterStatus'].forEach(id => {
   document.getElementById(id).addEventListener('input', applyFilters);
   document.getElementById(id).addEventListener('change', applyFilters);
 });

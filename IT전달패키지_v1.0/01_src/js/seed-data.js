@@ -699,3 +699,55 @@ const DEMO_STAGE_HISTORY_SEED = [
   {id:"h439",deal_id:"a0303d12-f247-4797-8587-7e3a5d771826",stage:"심층검토",changed_by:"엑셀이관",changed_at:"2026-06-05T00:02:00Z"},
   {id:"h440",deal_id:"c5066175-3097-425b-8f83-1b830ddb605d",stage:"접수",changed_by:"엑셀이관",changed_at:"2026-06-09T00:00:00Z"},
 ];
+
+// 텔레그램 딜 접수(Beta-9.0) 데모용 예시. 실제로는 텔레그램 봇이
+// api/telegram-webhook.js 를 거쳐 만들지만, 데모 모드에서도 '텔레그램
+// 접수' 화면이 어떻게 보이는지 체험할 수 있도록 미리 2건을 넣어둡니다.
+const DEMO_DEAL_DRAFTS_SEED = [
+  {
+    id: "d1",
+    raw_message: "테크스타트업C 시리즈A 투자 건입니다. 전환사채(CB)로 30억 검토 중이고, GP는 한빛벤처스. 만기 3년, 기대수익률 연 8% 수준. SaaS 매출 성장률이 핵심 논거이고 리스크는 경쟁사 진입입니다.",
+    telegram_user_id: "100000001",
+    telegram_username: "dongmin.yang",
+    telegram_chat_id: "100000001",
+    status: "대기",
+    parsed: {
+      deal_name: "테크스타트업C 시리즈A 투자",
+      asset_class: "PE/VC",
+      deal_size: 3000000000,
+      introducer_gp: "한빛벤처스",
+      investment_vehicle: "CB",
+      currency: "KRW",
+      review_amount: 3000000000,
+      maturity_term: "3년",
+      expected_return: "연 8%",
+      investment_thesis: "SaaS 매출 성장률",
+      key_risks: "경쟁사 진입"
+    },
+    created_deal_id: null,
+    reject_reason: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+  },
+  {
+    id: "d2",
+    raw_message: "물류센터 선순위 대출 건 하나 들어왔습니다. 50억 규모, 담보는 물류센터 건물. 상세는 자료 받아서 정리할게요.",
+    telegram_user_id: "100000002",
+    telegram_username: "seungjun.shin",
+    telegram_chat_id: "100000002",
+    status: "대기",
+    parsed: {
+      deal_name: "물류센터 선순위 대출",
+      asset_class: "부동산",
+      deal_size: 5000000000,
+      investment_vehicle: "대출",
+      currency: "KRW"
+    },
+    created_deal_id: null,
+    reject_reason: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: new Date(Date.now() - 20 * 3600 * 1000).toISOString()
+  }
+];

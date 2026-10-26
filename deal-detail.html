@@ -415,6 +415,80 @@ function nextActionSectionHTML() {
     </div>`;
 }
 
+// ── 투자조건 (1차검토 단계부터 노출) ──────────────────────────
+
+async function saveInvestmentTerms() {
+  const updated = {
+    investment_vehicle: document.getElementById('it_vehicle').value || null,
+    currency:           document.getElementById('it_currency').value || null,
+    review_amount:      Number(document.getElementById('it_amount').value) || null,
+    maturity_term:      document.getElementById('it_maturity').value.trim() || null,
+    expected_return:    document.getElementById('it_return').value.trim() || null,
+    investment_thesis:  document.getElementById('it_thesis').value.trim() || null,
+    key_risks:          document.getElementById('it_risks').value.trim() || null,
+  };
+  try {
+    deal = await updateDeal(dealId, updated);
+    showToast('투자조건이 저장되었습니다.', 'success');
+    render();
+  } catch(e) {
+    showToast('저장 실패: ' + e.message, 'danger');
+  }
+}
+
+function investmentTermsSectionHTML() {
+  const vehicleOptions = ['', ...INVESTMENT_VEHICLES].map(v =>
+    `<option value="${v}" ${(deal.investment_vehicle||'')===v ? 'selected':''}>${v || '미지정'}</option>`
+  ).join('');
+  const curOptions = ['', ...CURRENCIES].map(c =>
+    `<option value="${c}" ${(deal.currency||'')===c ? 'selected':''}>${c || '미지정'}</option>`
+  ).join('');
+
+  return `
+    <div class="detail-section mb-3">
+      <div class="detail-section-header"><i class="fas fa-file-contract" style="color:#1a237e"></i> 투자조건</div>
+      <div class="detail-section-body">
+        <div class="row g-2">
+          <div class="col-md-2">
+            <label class="form-label" style="font-size:12px">투자수단</label>
+            <select id="it_vehicle" class="form-select form-select-sm">${vehicleOptions}</select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size:12px">통화</label>
+            <select id="it_currency" class="form-select form-select-sm">${curOptions}</select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:12px">당사 검토금액 (원)</label>
+            <input type="number" id="it_amount" class="form-control form-control-sm" value="${escapeHtml(deal.review_amount||'')}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size:12px">만기</label>
+            <input type="text" id="it_maturity" class="form-control form-control-sm"
+              placeholder="예: 3년" value="${escapeHtml(deal.maturity_term||'')}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:12px">기대수익률</label>
+            <input type="text" id="it_return" class="form-control form-control-sm"
+              placeholder="예: 연 8%" value="${escapeHtml(deal.expected_return||'')}">
+          </div>
+          <div class="col-12">
+            <label class="form-label" style="font-size:12px">핵심 투자논거</label>
+            <textarea id="it_thesis" class="form-control form-control-sm" rows="2">${escapeHtml(deal.investment_thesis||'')}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label" style="font-size:12px">주요 위험</label>
+            <textarea id="it_risks" class="form-control form-control-sm" rows="2">${escapeHtml(deal.key_risks||'')}</textarea>
+          </div>
+        </div>
+        <div class="d-flex justify-content-end mt-2">
+          <button class="btn btn-sm btn-primary" onclick="saveInvestmentTerms()">
+            <i class="fas fa-save me-1"></i>저장
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
 // ── 편집 모드 ──────────────────────────────────────────────────
 
 function toggleEdit() {
@@ -553,6 +627,9 @@ function stageProgressHTML(current) {
 function render() {
   if (!deal) return;
 
+  // 접수 단계에서는 투자조건 섹션을 숨기고 1차검토부터 노출합니다.
+  const showInvestmentTerms = STAGES.indexOf(deal.current_stage) >= STAGES.indexOf('1차검토');
+
   document.getElementById('pageTitle').innerHTML =
     `<i class="fas fa-file-alt me-2" style="color:#1a237e"></i>${escapeHtml(deal.deal_name)}`;
   document.getElementById('pageSub').innerHTML =
@@ -580,6 +657,9 @@ function render() {
 
     <!-- 다음 액션·기한 -->
     ${nextActionSectionHTML()}
+
+    <!-- 투자조건: 접수 단계에서는 숨기고 1차검토부터 노출 -->
+    ${showInvestmentTerms ? investmentTermsSectionHTML() : ''}
 
     <div class="row g-3">
       <!-- 왼쪽 -->

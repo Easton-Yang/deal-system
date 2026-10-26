@@ -36,6 +36,8 @@ USER_FIELDS = [
     'next_action', 'next_action_owner', 'next_action_due', 'next_action_note',
     'review_status',
     'pass_reason', 'pass_reason_note', 'reconsider_condition',
+    'investment_vehicle', 'currency', 'review_amount', 'maturity_term',
+    'expected_return', 'investment_thesis', 'key_risks',
 ]
 
 # 이미 안전한 처리를 거치는 형태

@@ -28,6 +28,13 @@ CREATE TABLE IF NOT EXISTS deals (
   pass_reason          TEXT,                                   -- 패스 사유 분류: 가격/구조/신용/한도/일정/기타 (NULL 허용)
   pass_reason_note     TEXT,                                   -- 패스 사유 상세 메모 (NULL 허용)
   reconsider_condition TEXT,                                   -- 재검토 조건 (NULL 허용)
+  investment_vehicle TEXT,                                     -- 투자수단: 대출/사채/보통주/우선주/CB/펀드지분/기타 (NULL 허용)
+  currency           TEXT,                                     -- 통화: KRW/USD/EUR/JPY/기타 (NULL 허용)
+  review_amount      BIGINT,                                   -- 당사 검토금액 (NULL 허용)
+  maturity_term      TEXT,                                     -- 만기 (자유 입력, NULL 허용)
+  expected_return    TEXT,                                     -- 기대수익률 (자유 입력, NULL 허용)
+  investment_thesis  TEXT,                                     -- 핵심 투자논거 (NULL 허용)
+  key_risks          TEXT,                                     -- 주요 위험 (NULL 허용)
   created_at      TIMESTAMPTZ DEFAULT NOW(),                   -- 최초 등록 일시
   updated_at      TIMESTAMPTZ DEFAULT NOW()                    -- 최종 수정 일시 (트리거로 자동 갱신)
 );
@@ -47,7 +54,11 @@ ALTER TABLE deals
   ADD CONSTRAINT chk_review_status
     CHECK (review_status IN ('진행','외부회신 대기','보류','종결')),
   ADD CONSTRAINT chk_pass_reason
-    CHECK (pass_reason IN ('가격','구조','신용','한도','일정','기타') OR pass_reason IS NULL);
+    CHECK (pass_reason IN ('가격','구조','신용','한도','일정','기타') OR pass_reason IS NULL),
+  ADD CONSTRAINT chk_investment_vehicle
+    CHECK (investment_vehicle IN ('대출','사채','보통주','우선주','CB','펀드지분','기타') OR investment_vehicle IS NULL),
+  ADD CONSTRAINT chk_currency
+    CHECK (currency IN ('KRW','USD','EUR','JPY','기타') OR currency IS NULL);
 
 COMMENT ON TABLE deals IS '딜(투자건) 기본 정보 테이블';
 COMMENT ON COLUMN deals.deal_size IS '원 단위 정수. 예: 50억원 = 5000000000';
@@ -61,6 +72,13 @@ COMMENT ON COLUMN deals.review_status    IS '검토 상태: 진행/외부회신 
 COMMENT ON COLUMN deals.pass_reason         IS '패스 사유 분류. 2026-10 추가';
 COMMENT ON COLUMN deals.pass_reason_note     IS '패스 사유 상세 메모. 2026-10 추가';
 COMMENT ON COLUMN deals.reconsider_condition IS '재검토 조건(자유 입력). 2026-10 추가';
+COMMENT ON COLUMN deals.investment_vehicle IS '투자수단. 2026-10 추가';
+COMMENT ON COLUMN deals.currency           IS '통화. 2026-10 추가';
+COMMENT ON COLUMN deals.review_amount      IS '당사 검토금액(원 단위). 2026-10 추가';
+COMMENT ON COLUMN deals.maturity_term      IS '만기(자유 입력). 2026-10 추가';
+COMMENT ON COLUMN deals.expected_return    IS '기대수익률(자유 입력). 2026-10 추가';
+COMMENT ON COLUMN deals.investment_thesis  IS '핵심 투자논거. 2026-10 추가';
+COMMENT ON COLUMN deals.key_risks          IS '주요 위험. 2026-10 추가';
 
 
 -- ──────────────────────────────────────────────────────────────

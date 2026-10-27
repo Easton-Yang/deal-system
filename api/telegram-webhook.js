@@ -27,8 +27,13 @@
 //   TELEGRAM_USER_MAP         (선택) 텔레그램 ID → 담당자 이름 매핑,
 //                             JSON 문자열. 예: {"123456789":"dongmin.yang"}
 //   APP_BASE_URL              (선택) 확인 화면 주소. 비우면 요청 호스트로 추정
+//
+// 텍스트 외에 PDF·이미지 파일도 받습니다 (딜 티저·제안서 사진 등). 텔레그램이
+// 보낸 파일을 받아 Claude에 그대로 읽혀서 같은 방식으로 항목을 뽑아냅니다.
+// 워드(.docx)·엑셀(.xlsx)·한글(.hwp) 등은 아직 지원하지 않습니다(텍스트로
+// 옮겨 보내거나 PDF로 내보내 보내달라고 안내합니다).
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(200).send('ok');
     return;
@@ -52,20 +57,18 @@ module.exports = async function handler(req, res) {
 
   const message = update && update.message;
   const chatId = message && message.chat && message.chat.id;
-
-  if (!message || typeof message.text !== 'string') {
-    if (chatId) await sendTelegramMessage(chatId, '텍스트로 딜 내용을 보내주세요. (사진·파일은 아직 지원하지 않습니다)');
+  if (!message) {
     res.status(200).send('ok');
     return;
   }
 
-  const text = message.text.trim();
+  const text = (message.text || message.caption || '').trim();
   const fromId = String((message.from && message.from.id) || '');
   const fromUsername = (message.from && (message.from.username || message.from.first_name)) || '';
 
   if (text === '/start') {
     await sendTelegramMessage(chatId,
-      '딜 접수 봇입니다. 딜 내용을 자유롭게 입력해 보내주세요.\n' +
+      '딜 접수 봇입니다. 딜 내용을 텍스트로 입력하거나, PDF·사진으로 보내주세요.\n' +
       'AI가 내용을 정리해두고, 담당자가 확인한 뒤 시스템에 등록됩니다.');
     res.status(200).send('ok');
     return;
@@ -89,15 +92,54 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  // 첨부파일(문서 또는 사진) 확인
+  let fileRef = null;
+  if (message.document) {
+    fileRef = {
+      file_id: message.document.file_id,
+      mime_type: message.document.mime_type || '',
+      file_name: message.document.file_name || '파일',
+    };
+  } else if (Array.isArray(message.photo) && message.photo.length > 0) {
+    fileRef = { file_id: message.photo[message.photo.length - 1].file_id, mime_type: 'image/jpeg', file_name: '사진' };
+  }
+
+  if (!text && !fileRef) {
+    await sendTelegramMessage(chatId, '텍스트, PDF, 또는 사진으로 딜 내용을 보내주세요.');
+    res.status(200).send('ok');
+    return;
+  }
+
+  let fileContent = null;
+  if (fileRef) {
+    const isPdf = fileRef.mime_type === 'application/pdf';
+    const isImage = fileRef.mime_type.startsWith('image/');
+    if (!isPdf && !isImage) {
+      await sendTelegramMessage(chatId,
+        `"${fileRef.file_name}" 형식은 아직 지원하지 않습니다. PDF나 사진으로 보내거나, 내용을 텍스트로 옮겨 보내주세요.`);
+      res.status(200).send('ok');
+      return;
+    }
+    try {
+      const base64 = await downloadTelegramFile(fileRef.file_id);
+      fileContent = { kind: isPdf ? 'document' : 'image', mediaType: isPdf ? 'application/pdf' : fileRef.mime_type, base64 };
+    } catch (err) {
+      console.error('telegram-webhook file download error:', err);
+      await sendTelegramMessage(chatId, '파일을 받아오지 못했습니다 (20MB 이하 PDF·사진으로 다시 시도해주세요).');
+      res.status(200).send('ok');
+      return;
+    }
+  }
+
   try {
-    const parsed = await extractDealFields(text);
+    const parsed = await extractDealFields(text, fileContent);
 
     let userMap = {};
     try { userMap = JSON.parse(process.env.TELEGRAM_USER_MAP || '{}'); } catch (e) {}
     if (userMap[fromId]) parsed.assigned_to = userMap[fromId];
 
     await insertDraft({
-      raw_message: text,
+      raw_message: text || `[첨부파일] ${fileRef.file_name}`,
       telegram_user_id: fromId,
       telegram_username: fromUsername,
       telegram_chat_id: String(chatId),
@@ -119,10 +161,16 @@ module.exports = async function handler(req, res) {
     }
     res.status(200).send('ok'); // 오류는 로그로만 남기고, 텔레그램 재시도는 막습니다
   }
-};
+}
 
-// AI(Claude)에게 메시지를 분석시켜 딜 항목을 구조화된 값으로 받습니다.
-async function extractDealFields(text) {
+module.exports = handler;
+// PDF·이미지 분석이 텍스트보다 오래 걸릴 수 있어 함수 제한시간을 넉넉히 둠
+// (Vercel 기본 10초 → 60초. Hobby 요금제에서도 허용되는 상한)
+module.exports.config = { maxDuration: 60 };
+
+// AI(Claude)에게 메시지(와 첨부파일)를 분석시켜 딜 항목을 구조화된 값으로 받습니다.
+// fileContent: { kind: 'document'|'image', mediaType, base64 } 또는 null
+async function extractDealFields(text, fileContent) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 가 설정되지 않았습니다');
 
@@ -148,6 +196,21 @@ async function extractDealFields(text) {
     },
   };
 
+  const instruction =
+    '다음은 투자회사 자산운용팀원이 텔레그램으로 보낸 딜(투자건) 제보입니다' +
+    (fileContent ? ' (첨부된 ' + (fileContent.kind === 'document' ? 'PDF 문서' : '사진') + ' 포함)' : '') + '. ' +
+    'save_deal_fields 도구를 호출해서 실제로 확인되는 값만 채우세요. ' +
+    '모르는 항목은 지어내지 말고 비워두세요.' +
+    (text ? '\n\n--- 메시지 ---\n' + text : '');
+
+  const content = [];
+  if (fileContent) {
+    content.push(fileContent.kind === 'document'
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileContent.base64 } }
+      : { type: 'image', source: { type: 'base64', media_type: fileContent.mediaType, data: fileContent.base64 } });
+  }
+  content.push({ type: 'text', text: instruction });
+
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -160,13 +223,7 @@ async function extractDealFields(text) {
       max_tokens: 1024,
       tools: [tool],
       tool_choice: { type: 'tool', name: 'save_deal_fields' },
-      messages: [{
-        role: 'user',
-        content:
-          '다음은 투자회사 자산운용팀원이 텔레그램으로 보낸 딜(투자건) 제보 메시지입니다. ' +
-          'save_deal_fields 도구를 호출해서 메시지에 실제로 적힌 값만 채우세요. ' +
-          '모르는 항목은 지어내지 말고 비워두세요.\n\n--- 메시지 ---\n' + text,
-      }],
+      messages: [{ role: 'user', content }],
     }),
   });
 
@@ -213,4 +270,23 @@ async function sendTelegramMessage(chatId, text) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text }),
   }).catch(() => {});
+}
+
+// 텔레그램이 보관 중인 파일을 받아와 base64 문자열로 돌려줍니다.
+// 봇 API 는 20MB 넘는 파일은 이 방식으로 못 받습니다(텔레그램 자체 제한).
+async function downloadTelegramFile(fileId) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN 이 설정되지 않았습니다');
+
+  const infoResp = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`);
+  const info = await infoResp.json();
+  if (!info.ok || !info.result || !info.result.file_path) {
+    throw new Error('파일 정보를 가져오지 못했습니다 (' + (info.description || 'unknown') + ')');
+  }
+
+  const fileResp = await fetch(`https://api.telegram.org/file/bot${token}/${info.result.file_path}`);
+  if (!fileResp.ok) throw new Error('파일 다운로드 실패: ' + fileResp.status);
+
+  const arrayBuffer = await fileResp.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
 }

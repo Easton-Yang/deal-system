@@ -417,11 +417,23 @@ function nextActionSectionHTML() {
 
 // ── 투자조건 (1차검토 단계부터 노출) ──────────────────────────
 
+// 통화를 바꾸면 입력 단위(억/백만/천만)가 달라지므로, 숫자를 잘못된 단위로
+// 그대로 두면 엉뚱한 금액이 저장됩니다. 라벨을 새 단위로 바꾸고 입력칸은
+// 비워서 다시 입력하게 합니다.
+function onInvestmentCurrencyChange() {
+  const currency = document.getElementById('it_currency').value || 'KRW';
+  const unit = currencyUnit(currency);
+  document.getElementById('it_amount_unit').textContent = unit.label || '그대로';
+  document.getElementById('it_amount').value = '';
+}
+
 async function saveInvestmentTerms() {
+  const currency = document.getElementById('it_currency').value || 'KRW';
+  const unit = currencyUnit(currency);
   const updated = {
     investment_vehicle: document.getElementById('it_vehicle').value || null,
     currency:           document.getElementById('it_currency').value || null,
-    review_amount:      Math.round(Number(document.getElementById('it_amount').value) * 1e8) || null,
+    review_amount:      Math.round(Number(document.getElementById('it_amount').value) * unit.factor) || null,
     maturity_term:      document.getElementById('it_maturity').value.trim() || null,
     expected_return:    document.getElementById('it_return').value.trim() || null,
     investment_thesis:  document.getElementById('it_thesis').value.trim() || null,
@@ -443,6 +455,7 @@ function investmentTermsSectionHTML() {
   const curOptions = ['', ...CURRENCIES].map(c =>
     `<option value="${c}" ${(deal.currency||'')===c ? 'selected':''}>${c || '미지정'}</option>`
   ).join('');
+  const itUnit = currencyUnit(deal.currency || 'KRW');
 
   return `
     <div class="detail-section mb-3">
@@ -455,11 +468,11 @@ function investmentTermsSectionHTML() {
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size:12px">통화</label>
-            <select id="it_currency" class="form-select form-select-sm">${curOptions}</select>
+            <select id="it_currency" class="form-select form-select-sm" onchange="onInvestmentCurrencyChange()">${curOptions}</select>
           </div>
           <div class="col-md-3">
-            <label class="form-label" style="font-size:12px">당사 검토금액 (억원)</label>
-            <input type="number" id="it_amount" class="form-control form-control-sm" step="0.1" value="${escapeHtml(deal.review_amount ? deal.review_amount/1e8 : '')}">
+            <label class="form-label" style="font-size:12px">당사 검토금액 (<span id="it_amount_unit">${itUnit.label || '그대로'}</span>)</label>
+            <input type="number" id="it_amount" class="form-control form-control-sm" step="0.01" value="${escapeHtml(deal.review_amount ? deal.review_amount/itUnit.factor : '')}">
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size:12px">만기</label>

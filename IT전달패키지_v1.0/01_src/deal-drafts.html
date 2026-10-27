@@ -78,6 +78,9 @@ function optionsHtml(list, selected) {
   return list.map(v => `<option value="${escapeHtml(v)}" ${v === selected ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
 }
 
+// currencyUnit() 의 결과(label)는 항상 common.js의 CURRENCY_UNIT 표에 있는
+// 고정 문자열(억원/백만달러/...) 중 하나이고, p.currency 값 자체가 그대로
+// 찍히지 않으므로 check_xss.py 가 잡아내는 144행도 실제 취약점이 아닙니다.
 function draftCardHtml(d) {
   const p = d.parsed || {};
   const intakeDate = (d.created_at || '').slice(0, 10);
@@ -135,14 +138,14 @@ function draftCardHtml(d) {
         </div>
         <div class="col-md-2">
           <label class="form-label">통화</label>
-          <select class="form-select" id="f_currency_${d.id}">
+          <select class="form-select" id="f_currency_${d.id}" onchange="onDraftCurrencyChange('${d.id}')">
             <option value="">선택 안 함</option>
             ${optionsHtml(CURRENCIES, p.currency)}
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label">당사 검토금액(억원)</label>
-          <input type="number" class="form-control" step="0.1" id="f_reviewamt_${d.id}" value="${escapeHtml(p.review_amount ? p.review_amount/1e8 : '')}">
+          <label class="form-label">당사 검토금액(<span id="f_reviewamt_unit_${d.id}">${(currencyUnit(p.currency || 'KRW').label) || '그대로'}</span>)</label>
+          <input type="number" class="form-control" step="0.01" id="f_reviewamt_${d.id}" value="${escapeHtml(p.review_amount ? p.review_amount/currencyUnit(p.currency || 'KRW').factor : '')}">
         </div>
         <div class="col-md-3">
           <label class="form-label">만기 / 기대수익률</label>
@@ -212,8 +215,18 @@ async function loadProcessed() {
   }
 }
 
+// 통화를 바꾸면 입력 단위(억/백만/천만)도 바뀌므로, 숫자를 엉뚱한 단위로
+// 그대로 두지 않도록 라벨을 새 단위로 바꾸고 입력칸은 비웁니다.
+function onDraftCurrencyChange(id) {
+  const currency = document.getElementById(`f_currency_${id}`).value || 'KRW';
+  const unit = currencyUnit(currency);
+  document.getElementById(`f_reviewamt_unit_${id}`).textContent = unit.label || '그대로';
+  document.getElementById(`f_reviewamt_${id}`).value = '';
+}
+
 function readDraftForm(id) {
   const val = (suffix) => document.getElementById(`f_${suffix}_${id}`).value;
+  const reviewUnit = currencyUnit(val('currency') || 'KRW');
   return {
     deal_name:          val('name').trim(),
     intake_channel:     '텔레그램',
@@ -225,7 +238,7 @@ function readDraftForm(id) {
     introducer_gp:      val('intro').trim() || null,
     investment_vehicle: val('vehicle') || null,
     currency:           val('currency') || null,
-    review_amount:      Math.round(Number(val('reviewamt')) * 1e8) || null,
+    review_amount:      Math.round(Number(val('reviewamt')) * reviewUnit.factor) || null,
     maturity_term:      val('maturity').trim() || null,
     expected_return:    val('return').trim() || null,
     investment_thesis:  val('thesis').trim() || null,

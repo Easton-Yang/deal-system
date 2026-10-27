@@ -186,7 +186,7 @@ async function extractDealFields(text, fileContent) {
         introducer_gp: { type: 'string', description: '소개자 또는 GP명' },
         investment_vehicle: { type: 'string', enum: ['대출','사채','보통주','우선주','CB','펀드지분','기타'] },
         currency: { type: 'string', enum: ['KRW','USD','EUR','JPY','기타'] },
-        review_amount: { type: 'integer', description: '당사 검토금액, 원 단위 정수' },
+        review_amount: { type: 'integer', description: '당사 검토금액. currency로 답한 통화의 최소 단위 정수(환율 환산 없이 그대로). 예: USD 500만달러 → 5000000, KRW 50억원 → 5000000000' },
         maturity_term: { type: 'string', description: '만기 (자유 입력, 예: 3년)' },
         expected_return: { type: 'string', description: '기대수익률 (자유 입력, 예: 연 8%)' },
         investment_thesis: { type: 'string', description: '핵심 투자논거' },

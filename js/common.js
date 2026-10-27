@@ -9,6 +9,12 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-9.5  2026-10-27  화면에 보여줄 딜 시작일 추가(config.js의
+//                         DISPLAY_FROM_DATE = '2026-10-01'). 엑셀이관 과거
+//                         247건을 목록·대시보드·칸반·진행경과·주간보고에서
+//                         화면상으로만 숨김(DB 삭제 아님, 언제든 되돌릴 수
+//                         있음). getDeals()에서 한 곳만 고쳐 전체 화면에
+//                         일괄 적용. 화면 로직 수정이라 뒷자리 +1
 //   Beta-9.4  2026-10-27  텔레그램 접수에 PPT(.pptx)·워드(.docx) 지원 추가.
 //                         npm 패키지 없이 내장 zlib로 직접 압축을 풀어 글자만
 //                         뽑아낸 뒤 텍스트로 분석(PDF·사진보다 저렴). 예전
@@ -65,7 +71,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-9.4';
+const APP_VERSION = 'Beta-9.5';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -190,6 +196,9 @@ function getSB() {
 async function getDeals(filters = {}) {
   if (DEMO_MODE) {
     let deals = demoGet('deals_v3');
+    // DISPLAY_FROM_DATE(config.js) 이전에 접수된 딜은 화면에서 숨깁니다
+    // (DB 삭제 아님 — 과거 엑셀이관분을 목록·대시보드·주간보고 등에서 제외하기 위함)
+    if (DISPLAY_FROM_DATE) deals = deals.filter(d => (d.intake_date || '') >= DISPLAY_FROM_DATE);
     if (filters.asset_class) deals = deals.filter(d => d.asset_class === filters.asset_class);
     if (filters.assigned_to) deals = deals.filter(d => d.assigned_to === filters.assigned_to);
     if (filters.current_stage) deals = deals.filter(d => d.current_stage === filters.current_stage);
@@ -203,6 +212,7 @@ async function getDeals(filters = {}) {
     return deals.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
   let q = getSB().from('deals').select('*').order('created_at', { ascending: false });
+  if (DISPLAY_FROM_DATE) q = q.gte('intake_date', DISPLAY_FROM_DATE);
   if (filters.asset_class) q = q.eq('asset_class', filters.asset_class);
   if (filters.assigned_to) q = q.eq('assigned_to', filters.assigned_to);
   if (filters.current_stage) q = q.eq('current_stage', filters.current_stage);

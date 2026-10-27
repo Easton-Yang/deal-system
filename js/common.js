@@ -9,6 +9,20 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-12.0 2026-10-27  단계·결과 명칭 변경: '패스' → '드랍'. STAGES·
+//                         FINAL_RESULTS 등 common.js 상수, 딜 상세·목록·칸반·
+//                         진행경과·주간보고 화면, 스키마 CHECK 제약, 명세서
+//                         스크립트까지 전부 반영(패스_드랍_용어변경_SQL.sql로
+//                         기존 DB 데이터도 함께 변경). pass_reason 등 DB 컬럼
+//                         이름 자체는 내부 식별자라 그대로 둠(자산군 명칭
+//                         변경 때와 같은 방식). 핵심 용어 변경 + DB 데이터
+//                         변경이라 앞자리 올림. 같은 버전에서 퍼널 공
+//                         애니메이션도 개선: 드랍된 딜의 공은 그 단계까지
+//                         내려오다 깔때기 밖으로 튕겨나가 회색으로 멈추도록
+//                         구분(getDealFunnelStats()의 dealBalls에 dropped
+//                         플래그 추가, index.html의 funnelEjectSlot()·
+//                         애니메이션 경로 분기, css/style.css에 dropped·
+//                         landed 스타일과 튕기는 pop 효과 추가)
 //   Beta-11.8 2026-10-27  공 애니메이션 두 가지 조정.
 //                         1) 반복 재생 중단: 그동안은 공이 다 떨어지고 나면
 //                         몇 초 뒤 전체를 지우고 처음부터 다시 떨어뜨렸는데,
@@ -150,10 +164,10 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-11.8';
+const APP_VERSION = 'Beta-12.0';
 
 // 상수 정의
-const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
+const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
 // 자산군 = 포트폴리오현황보고 '세부유형' 분류 (대체투자 → 주식 → 채권 순)
 // 2026-10-27: 'PE/VC' → '기업 Equity', '사모크레딧' → '기업 Debt' 로 명칭 변경
 // (기존 데이터도 함께 변경 — 자산군_용어변경_SQL.sql 참고). 분류 자체(10종)와
@@ -162,7 +176,7 @@ const ASSET_CLASSES = ['기업 Equity', '부동산', '인프라', '기업 Debt',
                        '상장주식', '메자닌/비상장', '공모주',
                        '원화채권', '해외채권', '기타'];
 const INTAKE_CHANNELS = ['이메일', '카카오톡', '텔레그램', '기타'];
-const FINAL_RESULTS = ['투자', '패스', '보류'];
+const FINAL_RESULTS = ['투자', '드랍', '보류'];
 const UNASSIGNED = '미배정';   // 담당자 미지정 딜 (엑셀 이관분 등)
 
 // 검토 상태: 단계(STAGES)와 별개로, 실제로 움직이고 있는지를 나타냅니다.
@@ -177,8 +191,10 @@ const REVIEW_STATUS_BADGE = {
   '종결':        'bg-dark'
 };
 
-// 딜을 '패스'로 바꿀 때 고르는 사유 분류. 자유 메모(pass_reason_note)와
+// 딜을 '드랍'으로 바꿀 때 고르는 사유 분류. 자유 메모(pass_reason_note)와
 // 재검토 조건(reconsider_condition)은 별도 자유 입력 칸입니다.
+// (2026-10-27: 단계명 '패스'→'드랍'으로 변경. DB 컬럼명 pass_reason·
+//  pass_reason_note·상수명 PASS_REASONS는 내부 식별자라 그대로 둡니다.)
 const PASS_REASONS = ['가격', '구조', '신용', '한도', '일정', '기타'];
 
 // 투자조건(1단계, 공통 필드만). 자산별 추가 항목(담보·LTV, 보수·캐리 등)은
@@ -209,7 +225,7 @@ const STAGE_BADGE = {
   '심층검토':'bg-warning text-dark',
   'IC':      'bg-info text-dark',
   '투자확정':'bg-success',
-  '패스':    'bg-danger'
+  '드랍':    'bg-danger'
 };
 
 const ASSET_COLOR = {
@@ -220,7 +236,7 @@ const ASSET_COLOR = {
 };
 
 const RESULT_BADGE = {
-  '투자': 'bg-success', '패스': 'bg-danger', '보류': 'bg-warning text-dark'
+  '투자': 'bg-success', '드랍': 'bg-danger', '보류': 'bg-warning text-dark'
 };
 
 // ── Demo 데이터 (localStorage 기반) ────────────────────────────
@@ -317,10 +333,10 @@ async function getDeal(id) {
 // ── 딜 퍼널 통계 (Beta-11.1) ───────────────────────────────────────
 // 대시보드의 "딜 소싱 → 투자 전환" 퍼널 그래픽에 씁니다. 접수부터
 // 투자확정까지 각 단계에 '한 번이라도 도달한 적 있는' 딜 수를 셉니다.
-// 현재 단계만 보면 안 되는 이유: 심층검토까지 갔다가 패스된 딜도
+// 현재 단계만 보면 안 되는 이유: 심층검토까지 갔다가 드랍된 딜도
 // 심층검토 단계까지는 도달했던 걸로 쳐야 퍼널(깔때기)이 맞기 때문입니다.
 // 그래서 현재 단계가 아니라 단계 이력(deal_stage_history)을 기준으로
-// "도달한 가장 높은 단계"를 계산합니다. '패스'는 도달 단계가 아니라
+// "도달한 가장 높은 단계"를 계산합니다. '드랍'은 도달 단계가 아니라
 // 중간에 빠져나가는 결과라 퍼널 단계에서 뺍니다.
 const FUNNEL_STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정'];
 
@@ -416,10 +432,13 @@ async function getDealFunnelStats(periodValue) {
 
   // 공 애니메이션에서 공 하나하나를 실제 딜로 연결하기 위한 목록(Beta-11.6).
   // stopStage = 그 딜이 도달한 가장 높은 단계(0=접수 ... 4=투자확정).
+  // dropped = '드랍'으로 처리된 딜인지(Beta-11.9) — 드랍된 딜은 공이 그
+  // 단계까지 내려오다 깔때기 밖으로 튕겨나가는 애니메이션으로 구분해 보여줍니다.
   const dealBalls = deals.map(d => ({
     id: d.id,
     deal_name: d.deal_name,
     stopStage: Math.max(maxLevel[d.id] ?? 0, 0),
+    dropped: d.current_stage === '드랍',
   }));
 
   return { total, periodLabel, stages, deals: dealBalls };

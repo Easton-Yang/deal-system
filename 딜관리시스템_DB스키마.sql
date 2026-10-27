@@ -19,14 +19,14 @@ CREATE TABLE IF NOT EXISTS deals (
   introducer_gp   TEXT,                                        -- 소개자 또는 GP명 (NULL 허용)
   current_stage   TEXT        NOT NULL DEFAULT '접수',         -- 현재 검토 단계
   first_opinion   TEXT,                                        -- 1차 검토 의견 (NULL 허용)
-  final_result    TEXT,                                        -- 최종 결과: 투자/패스/보류 (NULL=미결정)
+  final_result    TEXT,                                        -- 최종 결과: 투자/드랍/보류 (NULL=미결정)
   next_action        TEXT,                                     -- 다음에 할 일 (NULL 허용)
   next_action_owner  TEXT,                                     -- 다음 액션 담당자 (NULL 허용)
   next_action_due    DATE,                                     -- 다음 액션 기한 (NULL 허용)
   next_action_note   TEXT,                                     -- 대기 사유 등 메모 (NULL 허용)
   review_status      TEXT        NOT NULL DEFAULT '진행',      -- 검토 상태: 진행/외부회신 대기/보류/종결
-  pass_reason          TEXT,                                   -- 패스 사유 분류: 가격/구조/신용/한도/일정/기타 (NULL 허용)
-  pass_reason_note     TEXT,                                   -- 패스 사유 상세 메모 (NULL 허용)
+  pass_reason          TEXT,                                   -- 드랍 사유 분류: 가격/구조/신용/한도/일정/기타 (NULL 허용)
+  pass_reason_note     TEXT,                                   -- 드랍 사유 상세 메모 (NULL 허용)
   reconsider_condition TEXT,                                   -- 재검토 조건 (NULL 허용)
   investment_vehicle TEXT,                                     -- 투자수단: 대출/사채/보통주/우선주/CB/펀드지분/기타 (NULL 허용)
   currency           TEXT,                                     -- 통화: KRW/USD/EUR/JPY/기타 (NULL 허용)
@@ -48,9 +48,9 @@ ALTER TABLE deals
                            '상장주식','메자닌/비상장','공모주',
                            '원화채권','해외채권','기타')),
   ADD CONSTRAINT chk_current_stage
-    CHECK (current_stage IN ('접수','1차검토','심층검토','IC','투자확정','패스')),
+    CHECK (current_stage IN ('접수','1차검토','심층검토','IC','투자확정','드랍')),
   ADD CONSTRAINT chk_final_result
-    CHECK (final_result IN ('투자','패스','보류') OR final_result IS NULL),
+    CHECK (final_result IN ('투자','드랍','보류') OR final_result IS NULL),
   ADD CONSTRAINT chk_review_status
     CHECK (review_status IN ('진행','외부회신 대기','보류','종결')),
   ADD CONSTRAINT chk_pass_reason
@@ -62,15 +62,15 @@ ALTER TABLE deals
 
 COMMENT ON TABLE deals IS '딜(투자건) 기본 정보 테이블';
 COMMENT ON COLUMN deals.deal_size IS '원 단위 정수. 예: 50억원 = 5000000000';
-COMMENT ON COLUMN deals.current_stage IS '현재 검토 단계. 접수/1차검토/심층검토/IC/투자확정/패스';
+COMMENT ON COLUMN deals.current_stage IS '현재 검토 단계. 접수/1차검토/심층검토/IC/투자확정/드랍';
 COMMENT ON COLUMN deals.updated_at IS 'deals_set_updated_at 트리거가 UPDATE 시 자동 갱신';
 COMMENT ON COLUMN deals.next_action IS '다음에 해야 할 일 (자유 입력). 2026-10 추가';
 COMMENT ON COLUMN deals.next_action_owner IS '다음 액션을 수행할 담당자. 2026-10 추가';
 COMMENT ON COLUMN deals.next_action_due IS '다음 액션 기한. 2026-10 추가';
 COMMENT ON COLUMN deals.next_action_note IS '대기 사유 등 메모. 2026-10 추가';
 COMMENT ON COLUMN deals.review_status    IS '검토 상태: 진행/외부회신 대기/보류/종결. 2026-10 추가';
-COMMENT ON COLUMN deals.pass_reason         IS '패스 사유 분류. 2026-10 추가';
-COMMENT ON COLUMN deals.pass_reason_note     IS '패스 사유 상세 메모. 2026-10 추가';
+COMMENT ON COLUMN deals.pass_reason         IS '드랍 사유 분류. 2026-10 추가';
+COMMENT ON COLUMN deals.pass_reason_note     IS '드랍 사유 상세 메모. 2026-10 추가';
 COMMENT ON COLUMN deals.reconsider_condition IS '재검토 조건(자유 입력). 2026-10 추가';
 COMMENT ON COLUMN deals.investment_vehicle IS '투자수단. 2026-10 추가';
 COMMENT ON COLUMN deals.currency           IS '통화. 2026-10 추가';
@@ -293,7 +293,7 @@ ALTER TABLE deal_files         DISABLE ROW LEVEL SECURITY;
 -- SELECT * FROM deals ORDER BY created_at DESC;
 
 -- 단계별 딜 건수
--- SELECT current_stage, COUNT(*) AS cnt FROM deals GROUP BY current_stage ORDER BY MIN(ARRAY_POSITION(ARRAY['접수','1차검토','심층검토','IC','투자확정','패스'], current_stage));
+-- SELECT current_stage, COUNT(*) AS cnt FROM deals GROUP BY current_stage ORDER BY MIN(ARRAY_POSITION(ARRAY['접수','1차검토','심층검토','IC','투자확정','드랍'], current_stage));
 
 -- 이번 달 신규 접수
 -- SELECT COUNT(*) FROM deals WHERE DATE_TRUNC('month', intake_date) = DATE_TRUNC('month', CURRENT_DATE);

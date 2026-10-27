@@ -305,6 +305,20 @@
     return slots;
   }
 
+  // '드랍'된 딜의 공이 깔때기 밖으로 튕겨나가 멈추는 자리를 계산합니다.
+  // 같은 단계에서 드랍된 공이 여러 개면 좌우로 번갈아, 바깥쪽으로 조금씩
+  // 더 멀리 자리를 잡아 서로 겹치지 않게 합니다.
+  function funnelEjectSlot(geo, stageIdx, index) {
+    const b = geo.bands[stageIdx];
+    const y = b.yTop + geo.segH * 0.55 + (index % 3) * 9;
+    const side = index % 2 === 0 ? -1 : 1;
+    const ringW = funnelWidthAtY(geo, y);
+    const margin = 10 + Math.floor(index / 2) * 12;
+    let x = geo.width / 2 + side * (ringW / 2 + margin);
+    x = Math.min(Math.max(x, 8), geo.width - 8); // 카드 밖으로 넘어가지 않게
+    return { x, y };
+  }
+
   async function animateFunnelBall(el, waypoints, myEpoch, getEpoch) {
     el.classList.add('show');
     for (const wp of waypoints) {
@@ -333,19 +347,33 @@
     // 공이 많을 때(딜이 많은 기간)도 등장이 너무 늘어지지 않게 간격을 자동으로 줄입니다.
     const stagger = Math.max(12, Math.min(140, 1300 / total));
 
+    // 깔때기 안에 쌓이는 공(안 드랍된 딜)과, 그 단계에서 밖으로 튕겨나가는
+    // 공(드랍된 딜)을 따로 배치합니다.
+    const stayedBalls = dealBalls.filter(db => !db.dropped);
+
     const byStage = {};
-    dealBalls.forEach(db => { (byStage[db.stopStage] = byStage[db.stopStage] || []).push(db); });
+    stayedBalls.forEach(db => { (byStage[db.stopStage] = byStage[db.stopStage] || []).push(db); });
     const slotsByStage = {};
     Object.keys(byStage).forEach(s => { slotsByStage[s] = funnelLandingSlots(geo, Number(s), byStage[s].length); });
-    const slotCursor = {};
+    const stayedCursor = {};
+    const stayedSlotOf = (stageIdx) => {
+      const idx = stayedCursor[stageIdx] || 0;
+      stayedCursor[stageIdx] = idx + 1;
+      return slotsByStage[stageIdx][idx];
+    };
+
+    const dropCursor = {};
+    const dropSlotOf = (stageIdx) => {
+      const idx = dropCursor[stageIdx] || 0;
+      dropCursor[stageIdx] = idx + 1;
+      return funnelEjectSlot(geo, stageIdx, idx);
+    };
 
     dealBalls.forEach((db, j) => {
-      const cursor = slotCursor[db.stopStage] || 0;
-      slotCursor[db.stopStage] = cursor + 1;
-      const landing = slotsByStage[db.stopStage][cursor];
+      const landing = db.dropped ? dropSlotOf(db.stopStage) : stayedSlotOf(db.stopStage);
 
       const el = document.createElement('div');
-      el.className = 'funnel-ball';
+      el.className = 'funnel-ball' + (db.dropped ? ' dropped' : '');
       el.style.left = spawnX + 'px';
       el.style.top = spawnY + 'px';
       // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
@@ -367,11 +395,20 @@
       });
       ballLayer.appendChild(el);
 
+      // 드랍된 딜은 그 단계까지 깔때기 중앙으로 내려오다가, 마지막에 밖으로
+      // 튕겨나가는 구간이 하나 더 붙습니다.
       const waypoints = [];
-      for (let i = 0; i <= db.stopStage; i++) {
-        waypoints.push(i === db.stopStage ? landing : { x: geo.width / 2, y: geo.bands[i].yBot - 2 });
+      for (let i = 0; i < db.stopStage; i++) {
+        waypoints.push({ x: geo.width / 2, y: geo.bands[i].yBot - 2 });
       }
-      setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * stagger);
+      if (db.dropped) waypoints.push({ x: geo.width / 2, y: geo.bands[db.stopStage].yTop + geo.segH * 0.3 });
+      waypoints.push(landing);
+
+      setTimeout(() => {
+        animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch).then(() => {
+          if (db.dropped && funnelEpoch === myEpoch) el.classList.add('landed');
+        });
+      }, j * stagger);
     });
   }
 

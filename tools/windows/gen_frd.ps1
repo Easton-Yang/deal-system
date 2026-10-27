@@ -149,7 +149,7 @@ $t5=mkt 6 3 @(28,45,27)
 setCell $t5 1 1 "기능" $NAVY $WHITE $true $true; setCell $t5 1 2 "설명" $NAVY $WHITE $true $true; setCell $t5 1 3 "비고" $NAVY $WHITE $true $true
 @(@("텍스트 검색","딜명/GP명 실시간 검색","대소문자 구분 없음"),
   @("자산군 필터","드롭다운: 기업 Equity, 부동산, 인프라, 기업 Debt, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타",""),
-  @("단계 필터","드롭다운: 접수/1차검토/심층검토/IC/투자확정/패스",""),
+  @("단계 필터","드롭다운: 접수/1차검토/심층검토/IC/투자확정/드랍",""),
   @("담당자 필터","드롭다운: 팀원 목록 + 미배정","엑셀 이관 딜은 미배정"),
   @("딜 삭제","행 우측 삭제 버튼, 확인 모달 후 삭제","삭제 후 복구 불가")) | ForEach-Object -Begin {$i=2} -Process {
     $bg=if($i%2-eq0){$LGRAY}else{$WHITE}; setCell $t5 $i 1 $_[0] $bg $NAVY $true; setCell $t5 $i 2 $_[1] $bg; setCell $t5 $i 3 $_[2] $bg; $i++
@@ -160,7 +160,7 @@ wp "표시 컬럼: 딜명/GP명 · 자산군 · 인입경로 · 인입일 · 담
 wh2 "3.3 딜 목록 — 칸반 뷰 (deals.html, 뷰 전환)"
 $t6=mkt 5 2 @(30,70)
 setCell $t6 1 1 "항목" $NAVY $WHITE $true $true; setCell $t6 1 2 "내용" $NAVY $WHITE $true $true
-@(@("컬럼 구성","접수 / 1차검토 / 심층검토 / IC / 투자확정 / 패스 (6개 컬럼, 가로 스크롤)"),
+@(@("컬럼 구성","접수 / 1차검토 / 심층검토 / IC / 투자확정 / 드랍 (6개 컬럼, 가로 스크롤)"),
   @("카드 표시 정보","딜명 · 자산군 배지 · 담당자 · 딜 규모 · 접수 경과일"),
   @("드래그&드롭","카드를 다른 컬럼으로 드래그 → 단계 변경 + 이력 자동 기록"),
   @("필터 연동","목록 뷰 필터(자산군/담당자/검색)가 칸반에도 동일 적용")) | ForEach-Object -Begin {$i=2} -Process {
@@ -180,7 +180,7 @@ setCell $t7 1 3 "유형" $NAVY $WHITE $true $true; setCell $t7 1 4 "선택항목
   @("담당자","필수","드롭다운","팀원 목록","기본값: 현재 사용자"),
   @("딜 규모","선택","숫자","원 단위, 한글 미리보기 표시","예: 50억원"),
   @("소개자/GP명","선택","텍스트","자유 입력",""),
-  @("검토 단계","필수","버튼 선택","접수(기본)/1차검토/심층검토/IC/투자확정/패스","진행중 딜 등록 시"),
+  @("검토 단계","필수","버튼 선택","접수(기본)/1차검토/심층검토/IC/투자확정/드랍","진행중 딜 등록 시"),
   @("1차 의견","선택","텍스트에어리어","자유 입력",""),
   @("초기 메모","선택","텍스트에어리어","저장 시 메모 탭 첫 항목으로 자동 등록","")) | ForEach-Object -Begin {$i=2} -Process {
     $bg=if($i%2-eq0){$LGRAY}else{$WHITE}
@@ -201,7 +201,7 @@ setCell $t8 1 1 "섹션" $NAVY $WHITE $true $true; setCell $t8 1 2 "기능 설�
   @("검토 메모","타임라인 형식, 작성자·날짜·내용 표시, 최신순 정렬","메모 입력 후 '추가' 클릭. 본인 메모 삭제 가능"),
   @("단계 이력","우측 사이드바, 단계 변경 기록 시간순 표시","자동 기록 (수동 추가 불가)"),
   @("파일 첨부","파일명·크기·업로더·일시 목록 표시","'파일 추가' 클릭 → 다중 선택 업로드, 삭제 버튼 제공"),
-  @("최종 결과","기본 정보 편집 모드에서 수정","드롭다운: 투자/패스/보류")) | ForEach-Object -Begin {$i=2} -Process {
+  @("최종 결과","기본 정보 편집 모드에서 수정","드롭다운: 투자/드랍/보류")) | ForEach-Object -Begin {$i=2} -Process {
     $bg=if($i%2-eq0){$LGRAY}else{$WHITE}; setCell $t8 $i 1 $_[0] $bg $NAVY $true; setCell $t8 $i 2 $_[1] $bg; setCell $t8 $i 3 $_[2] $bg; $i++
 }
 mat $t8
@@ -243,7 +243,7 @@ setCell $tD1 1 3 "제약" $NAVY $WHITE $true $true; setCell $tD1 1 4 "설명" $N
   @("introducer_gp","TEXT","NULL 허용","소개자 또는 GP명"),
   @("current_stage","TEXT","NOT NULL, DEFAULT '접수'","현재 검토 단계"),
   @("first_opinion","TEXT","NULL 허용","1차 검토 의견"),
-  @("final_result","TEXT","NULL 허용","최종 결과: 투자/패스/보류"),
+  @("final_result","TEXT","NULL 허용","최종 결과: 투자/드랍/보류"),
   @("created_at","TIMESTAMPTZ","DEFAULT NOW()","최초 등록 일시"),
   @("updated_at","TIMESTAMPTZ","DEFAULT NOW()","최종 수정 일시 (트리거 자동 갱신)")) | ForEach-Object -Begin {$i=2} -Process {
     $bg=if($i%2-eq0){$LGRAY}else{$WHITE}; setCell $tD1 $i 1 $_[0] $bg -1 $true; setCell $tD1 $i 2 $_[1] $bg; setCell $tD1 $i 3 $_[2] $bg; setCell $tD1 $i 4 $_[3] $bg; $i++

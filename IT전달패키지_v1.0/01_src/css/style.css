@@ -163,6 +163,18 @@ body {
   box-shadow: 0 2px 5px rgba(0,0,0,.45);
 }
 
+/* '드랍'된 딜의 공: 그 단계까지 내려오다 깔때기 밖으로 튕겨나가 회색으로
+   멈춥니다(Beta-11.9). 밖으로 나갈 때 살짝 튀는 느낌을 주는 pop 효과. */
+.funnel-ball.dropped {
+  background: radial-gradient(circle at 30% 30%, #fff, #9e9e9e 75%);
+}
+@keyframes funnelDropPop {
+  0%   { transform: translate(-50%, -50%) scale(1); }
+  55%  { transform: translate(-50%, -50%) scale(1.7); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.funnel-ball.dropped.landed { animation: funnelDropPop .32s ease; }
+
 /* 공에 올렸을 때 뜨는 말풍선 (직접 그림 — 네이티브 title 속성은 뜨는 데
    1초 안팎 걸려서 공이 다시 생기는 주기 안에 못 보일 수 있었음, Beta-11.7) */
 .funnel-tooltip {

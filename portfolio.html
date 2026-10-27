@@ -83,7 +83,7 @@
 </script>
 <script src="js/common.js"></script>
 <script>
-// 기본 표시 단계: 패스 제외, 접수도 포함
+// 기본 표시 단계: 드랍 제외, 접수도 포함
 let visibleStages = new Set(['접수', '1차검토', '심층검토', 'IC', '투자확정']);
 let allData = []; // { deal, stageMap, totalDays, excludedFromCalc, hasMigratedSegments }
 const STAGE_ACTIVE_COLOR  = '#f57c00';
@@ -93,10 +93,10 @@ const STAGE_PASS_COLOR    = '#ef9a9a';
 
 // 엑셀에서 옮긴 과거 딜(247건)은 접수일에 1분 간격으로 단계 이력을 기록했습니다
 // (changed_by = '엑셀이관'). 그 시각 간격은 실제 소요기간이 아니라서 날짜 계산에
-// 쓰면 안 됩니다. '투자확정'·'패스'는 결정이 내려진 시점이라, 그 뒤로 오늘까지
+// 쓰면 안 됩니다. '투자확정'·'드랍'은 결정이 내려진 시점이라, 그 뒤로 오늘까지
 // 시간이 계속 흐르는 것처럼 '진행 중'으로 세지 않습니다(검토는 결정일에 끝남).
 const EXCEL_MIGRATION_AUTHOR = '엑셀이관';
-const TERMINAL_STAGES = ['투자확정', '패스'];
+const TERMINAL_STAGES = ['투자확정', '드랍'];
 
 // 1일 미만이면 "N시간", 그 외엔 "N일"로 — 1분 차이를 전부 '1일'로 부풀리지 않습니다.
 function formatDuration(days) {
@@ -143,8 +143,8 @@ async function buildTimelineData(deal) {
     };
   }
 
-  // 결정 단계(투자확정/패스)는 '머문 기간'이 없는 한 시점이라 합계에 넣지 않습니다.
-  // 엑셀이관 구간도 제외합니다. 남는 게 하나도 없으면(예: 이관 접수 → 바로 패스)
+  // 결정 단계(투자확정/드랍)는 '머문 기간'이 없는 한 시점이라 합계에 넣지 않습니다.
+  // 엑셀이관 구간도 제외합니다. 남는 게 하나도 없으면(예: 이관 접수 → 바로 드랍)
   // 실제 걸린 기간을 알 방법이 없다는 뜻이라, 숫자를 지어내지 않고 제외 처리합니다.
   const measurable = Object.values(stageMap).filter(v => v.days !== null && !v.isDecided);
   const totalDays = measurable.reduce((s, v) => s + v.days, 0);
@@ -156,11 +156,11 @@ async function buildTimelineData(deal) {
 
 function renderTimelineCard(item) {
   const { deal, stageMap, totalDays, excludedFromCalc, hasMigratedSegments } = item;
-  const isPass = deal.current_stage === '패스';
+  const isPass = deal.current_stage === '드랍';
   const isTerminalDeal = TERMINAL_STAGES.includes(deal.current_stage);
 
-  // 단계 바 생성 (접수~투자확정 또는 패스까지)
-  const displayStages = isPass ? STAGES : STAGES.filter(s => s !== '패스');
+  // 단계 바 생성 (접수~투자확정 또는 드랍까지)
+  const displayStages = isPass ? STAGES : STAGES.filter(s => s !== '드랍');
 
   const bars = displayStages.map((stage, stageIdx) => {
     const info = stageMap[stage];
@@ -174,7 +174,7 @@ function renderTimelineCard(item) {
 
     const pct = (info.days != null && totalDays > 0) ? Math.max(info.days / totalDays, 0.04) : 0.08;
     let bgColor;
-    if (isPass && stage === '패스')  bgColor = STAGE_PASS_COLOR;
+    if (isPass && stage === '드랍')  bgColor = STAGE_PASS_COLOR;
     else if (info.isMigrated)        bgColor = '#bdbdbd';
     else if (info.isCurrent)         bgColor = STAGE_ACTIVE_COLOR;
     else                             bgColor = STAGE_DONE_COLORS[stageIdx % STAGE_DONE_COLORS.length];
@@ -283,7 +283,7 @@ function render() {
 
 const STAGE_BTN_COLOR = {
   '접수':    '#78909c', '1차검토':'#1a237e', '심층검토':'#e65100',
-  'IC':      '#0277bd', '투자확정':'#2e7d32', '패스':    '#c62828'
+  'IC':      '#0277bd', '투자확정':'#2e7d32', '드랍':    '#c62828'
 };
 
 function buildStageFilterBtns() {

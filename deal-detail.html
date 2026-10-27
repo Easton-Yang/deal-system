@@ -39,12 +39,12 @@
   </div>
 </div>
 
-<!-- 패스 사유 모달 -->
+<!-- 드랍 사유 모달 -->
 <div class="modal fade" id="passReasonModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header border-0">
-        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>패스 사유</h5>
+        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>드랍 사유</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -56,7 +56,7 @@
         </div>
         <div class="mb-3">
           <label class="form-label">상세 메모</label>
-          <textarea id="pr_note" class="form-control" rows="3" placeholder="패스 사유를 구체적으로 적어주세요..."></textarea>
+          <textarea id="pr_note" class="form-control" rows="3" placeholder="드랍 사유를 구체적으로 적어주세요..."></textarea>
         </div>
         <div>
           <label class="form-label">재검토 조건 (선택)</label>
@@ -66,7 +66,7 @@
       <div class="modal-footer border-0">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
         <button type="button" class="btn btn-danger" onclick="confirmPassReason()">
-          <i class="fas fa-ban me-1"></i> 패스로 처리
+          <i class="fas fa-ban me-1"></i> 드랍으로 처리
         </button>
       </div>
     </div>
@@ -105,7 +105,7 @@ async function changeStatusUI(newStatus) {
 
 async function changeStageUI(newStage) {
   if (newStage === deal.current_stage) return;
-  if (newStage === '패스') { openPassModal(); return; }
+  if (newStage === '드랍') { openPassModal(); return; }
   if (!confirm(`단계를 "${newStage}"(으)로 변경하시겠습니까?`)) return;
   try {
     await changeStage(dealId, newStage);
@@ -117,8 +117,8 @@ async function changeStageUI(newStage) {
   }
 }
 
-// ── 패스 사유 ──────────────────────────────────────────────────
-// 딜을 '패스'로 바꾸는 순간, 왜 패스했는지와 재검토 조건을 함께 기록합니다.
+// ── 드랍 사유 ──────────────────────────────────────────────────
+// 딜을 '드랍'으로 바꾸는 순간, 왜 드랍했는지와 재검토 조건을 함께 기록합니다.
 // 나중에 같은 딜이 다시 들어왔을 때 과거 판단을 참고할 수 있게 하기 위함입니다.
 
 let passReasonModal = null;
@@ -139,7 +139,7 @@ function openPassModal() {
 
 async function confirmPassReason() {
   const updated = {
-    current_stage:        '패스',
+    current_stage:        '드랍',
     review_status:         '종결',
     pass_reason:           document.getElementById('pr_reason').value || null,
     pass_reason_note:      document.getElementById('pr_note').value.trim() || null,
@@ -147,9 +147,9 @@ async function confirmPassReason() {
   };
   try {
     deal = await updateDeal(dealId, updated);
-    await tryAddStageHistory(dealId, '패스', currentUserName());
+    await tryAddStageHistory(dealId, '드랍', currentUserName());
     passReasonModal.hide();
-    showToast('딜이 "패스"로 처리되었습니다.', 'success');
+    showToast('딜이 "드랍"으로 처리되었습니다.', 'success');
     await load();
   } catch(e) {
     showToast('처리 실패: ' + e.message, 'danger');
@@ -525,7 +525,7 @@ function renderEditForm() {
   const assetOptions = ASSET_CLASSES.map(a => `<option value="${escapeHtml(a)}" ${deal.asset_class===a?'selected':''}>${escapeHtml(a)}</option>`).join('');
   const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${escapeHtml(c)}" ${deal.intake_channel===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
   const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${escapeHtml(m)}" ${deal.assigned_to===m?'selected':''}>${escapeHtml(m)}</option>`).join('');
-  const resultOptions = ['','투자','패스','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
+  const resultOptions = ['','투자','드랍','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
   const passReasonOptions = ['', ...PASS_REASONS].map(r => `<option value="${r}" ${(deal.pass_reason||'')===r?'selected':''}>${r||'선택 안 함'}</option>`).join('');
 
   editSection.innerHTML = `
@@ -570,11 +570,11 @@ function renderEditForm() {
             <select id="e_result" class="form-select">${resultOptions}</select>
           </div>
           <div class="col-md-4">
-            <label class="form-label">패스 사유 분류</label>
+            <label class="form-label">드랍 사유 분류</label>
             <select id="e_pass_reason" class="form-select">${passReasonOptions}</select>
           </div>
           <div class="col-md-8">
-            <label class="form-label">패스 사유 상세 메모</label>
+            <label class="form-label">드랍 사유 상세 메모</label>
             <input type="text" id="e_pass_note" class="form-control" value="${escapeHtml(deal.pass_reason_note||'')}">
           </div>
           <div class="col-12">
@@ -630,9 +630,9 @@ function stageProgressHTML(current) {
     const idx = STAGES.indexOf(s);
     const curIdx = STAGES.indexOf(current);
     let cls = '';
-    if (s === current && s === '패스') cls = 'pass-active';
+    if (s === current && s === '드랍') cls = 'pass-active';
     else if (s === current) cls = 'active';
-    else if (idx < curIdx && current !== '패스') cls = 'done';
+    else if (idx < curIdx && current !== '드랍') cls = 'done';
     return `<div class="stage-step ${cls}" onclick="changeStageUI('${s}')" title="${s}으로 변경">${s}</div>`;
   }).join('') + `</div>`;
 }
@@ -709,7 +709,7 @@ function render() {
             ${(deal.pass_reason || deal.pass_reason_note || deal.reconsider_condition) ? `
             <hr>
             <div class="info-row">
-              <div class="info-label">패스 사유</div>
+              <div class="info-label">드랍 사유</div>
               <div class="info-value">
                 ${deal.pass_reason ? `<span class="badge bg-danger-subtle text-danger-emphasis border me-1">${escapeHtml(deal.pass_reason)}</span>` : ''}
                 ${deal.pass_reason_note ? escapeHtml(deal.pass_reason_note).replace(/\n/g,'<br>') : ''}

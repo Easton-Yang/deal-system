@@ -151,12 +151,12 @@
   </div>
 </div>
 
-<!-- 패스 사유 모달 -->
+<!-- 드랍 사유 모달 -->
 <div class="modal fade" id="passReasonModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header border-0">
-        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>패스 사유</h5>
+        <h5 class="modal-title"><i class="fas fa-ban text-danger me-2"></i>드랍 사유</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -168,7 +168,7 @@
         </div>
         <div class="mb-3">
           <label class="form-label">상세 메모</label>
-          <textarea id="pr_note" class="form-control" rows="3" placeholder="패스 사유를 구체적으로 적어주세요..."></textarea>
+          <textarea id="pr_note" class="form-control" rows="3" placeholder="드랍 사유를 구체적으로 적어주세요..."></textarea>
         </div>
         <div>
           <label class="form-label">재검토 조건 (선택)</label>
@@ -178,7 +178,7 @@
       <div class="modal-footer border-0">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
         <button type="button" class="btn btn-danger" onclick="confirmPassReason()">
-          <i class="fas fa-ban me-1"></i> 패스로 처리
+          <i class="fas fa-ban me-1"></i> 드랍으로 처리
         </button>
       </div>
     </div>
@@ -422,7 +422,7 @@ document.getElementById('bulkApplyBtn').addEventListener('click', async function
 
 const STAGE_COL_COLOR = {
   '접수':    '#78909c', '1차검토':'#1a237e', '심층검토':'#e65100',
-  'IC':      '#0277bd', '투자확정':'#2e7d32', '패스':    '#c62828'
+  'IC':      '#0277bd', '투자확정':'#2e7d32', '드랍':    '#c62828'
 };
 
 function daysSince(dateStr) {
@@ -448,7 +448,7 @@ function kanbanCardHTML(d) {
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
       ${d.next_action ? `<div class="kc-next-action"><i class="fas fa-arrow-right me-1"></i>${escapeHtml(d.next_action)} · ${nextActionDueHTML(d.next_action_due)}</div>` : ''}
-      ${d.pass_reason ? `<div class="kc-next-action"><i class="fas fa-ban me-1"></i>패스 사유: ${escapeHtml(d.pass_reason)}</div>` : ''}
+      ${d.pass_reason ? `<div class="kc-next-action"><i class="fas fa-ban me-1"></i>드랍 사유: ${escapeHtml(d.pass_reason)}</div>` : ''}
       ${days !== null ? `<div class="kc-days">접수 ${days}일째</div>` : ''}
       ${d.final_result ? `<div class="mt-1">${resultBadge(d.final_result)}</div>` : ''}
     </div>`;
@@ -525,7 +525,7 @@ async function onDrop(e, newStage) {
   const deal = allDeals.find(d => d.id === dragSrcId);
   if (!deal || deal.current_stage === newStage) { dragSrcId = null; return; }
 
-  if (newStage === '패스') { openPassModal(dragSrcId); dragSrcId = null; return; }
+  if (newStage === '드랍') { openPassModal(dragSrcId); dragSrcId = null; return; }
 
   try {
     await changeStage(dragSrcId, newStage);
@@ -538,7 +538,7 @@ async function onDrop(e, newStage) {
   dragSrcId = null;
 }
 
-// ── 패스 사유 (칸반에서 '패스' 컬럼으로 드래그했을 때) ────────────
+// ── 드랍 사유 (칸반에서 '드랍' 컬럼으로 드래그했을 때) ────────────
 
 let passReasonModal = null;
 let passTargetId = null;
@@ -562,7 +562,7 @@ function openPassModal(dealId) {
 async function confirmPassReason() {
   if (!passTargetId) return;
   const updated = {
-    current_stage:        '패스',
+    current_stage:        '드랍',
     review_status:         '종결',
     pass_reason:           document.getElementById('pr_reason').value || null,
     pass_reason_note:      document.getElementById('pr_note').value.trim() || null,
@@ -570,11 +570,11 @@ async function confirmPassReason() {
   };
   try {
     const saved = await updateDeal(passTargetId, updated);
-    await tryAddStageHistory(passTargetId, '패스', currentUserName());
+    await tryAddStageHistory(passTargetId, '드랍', currentUserName());
     const idx = allDeals.findIndex(d => d.id === passTargetId);
     if (idx !== -1) allDeals[idx] = saved;
     passReasonModal.hide();
-    showToast(`"${escapeHtml(saved.deal_name)}" → 패스`, 'success');
+    showToast(`"${escapeHtml(saved.deal_name)}" → 드랍`, 'success');
     applyFilters();
   } catch(e) {
     showToast('처리 실패: ' + e.message, 'danger');

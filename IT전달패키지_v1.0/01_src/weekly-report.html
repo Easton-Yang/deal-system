@@ -129,8 +129,8 @@ async function loadReport() {
     .filter(h => !(h.stage === '접수' && newIntakeIds.has(h.deal_id)))
     .sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
 
-  const decisions = history.filter(h => ['투자확정', '패스'].includes(h.stage));
-  const stageChanges = history.filter(h => !['투자확정', '패스'].includes(h.stage));
+  const decisions = history.filter(h => ['투자확정', '드랍'].includes(h.stage));
+  const stageChanges = history.filter(h => !['투자확정', '드랍'].includes(h.stage));
 
   // 3) 결정 필요 (IC 단계 전체 — 현재 시점 스냅샷)
   const needsDecision = deals.filter(d => d.current_stage === 'IC');
@@ -170,7 +170,7 @@ function stageChangeRow(h, dealById) {
 function decisionRow(h, dealById) {
   const d = dealById[h.deal_id];
   if (!d) return '';
-  const reasonNote = h.stage === '패스' && d.pass_reason
+  const reasonNote = h.stage === '드랍' && d.pass_reason
     ? ` <span class="text-muted">(${escapeHtml(d.pass_reason)})</span>` : '';
   return `<tr ${goTo(d.id)}>
     <td>${escapeHtml(d.deal_name)}</td>
@@ -212,9 +212,9 @@ function render(data) {
       reportTable(['딜명', '변경된 단계', '변경일시', '변경자'],
         stageChanges.map(h => stageChangeRow(h, dealById)), '이번 주 단계가 바뀐 딜이 없습니다.')),
 
-    sectionCard('fa-gavel', '이번 주 결정 (투자확정·패스)', decisions.length,
+    sectionCard('fa-gavel', '이번 주 결정 (투자확정·드랍)', decisions.length,
       reportTable(['딜명', '결정', '결정일시', '결정자'],
-        decisions.map(h => decisionRow(h, dealById)), '이번 주 투자확정·패스로 결정된 딜이 없습니다.')),
+        decisions.map(h => decisionRow(h, dealById)), '이번 주 투자확정·드랍으로 결정된 딜이 없습니다.')),
 
     sectionCard('fa-triangle-exclamation', '결정 필요 (IC 단계)', needsDecision.length,
       reportTable(['딜명', '담당자', '인입일', '다음 액션'],

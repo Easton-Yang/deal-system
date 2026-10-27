@@ -26,7 +26,7 @@
 | `portfolio.html` | 진행경과: 딜별 단계 소요일 타임라인 |
 | `weekly-report.html` | 주간보고: 이번 주 신규접수·단계변경·결정 + IC 결정대기·기한초과 스냅샷, 인쇄/PDF |
 | `deal-drafts.html` | 텔레그램 접수 확인: AI가 분석한 초안을 담당자가 확인·수정 후 딜로 등록/반려 (2026-10-26 추가) |
-| `api/telegram-webhook.js` | 텔레그램 봇 웹훅(Vercel 서버 함수). 텍스트·PDF·사진 수신 → Claude API로 항목 추출 → `deal_drafts`에 저장 → 텔레그램 답장. service_role 키 사용 |
+| `api/telegram-webhook.js` | 텔레그램 봇 웹훅(Vercel 서버 함수). 텍스트·PDF·PPT·워드·사진 수신 → Claude API로 항목 추출 → `deal_drafts`에 저장 → 텔레그램 답장. service_role 키 사용 |
 | `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, LOGIN_EMAIL_DOMAIN |
 | `js/common.js` | 상수, 데이터 접근 함수(데모=localStorage / 라이브=Supabase), 유틸, 사이드바 |
 | `js/seed-data.js` | 데모 초기 데이터: 실제 딜 247건 (아래 참고) |
@@ -60,13 +60,23 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 - **텔레그램 딜 접수** (2026-10-26 추가, 2026-10-27 외부 설정 완료 → **현재 실제로 작동 중**).
   사용자가 "담당자가 텔레그램으로 메시지를 보내면 AI가 분석해서 정리해주면 좋겠다"고 요청해
   만들었습니다. 구조:
-  1. 담당자가 전용 텔레그램 봇(`wjpreed_deal_bot`)에게 딜 내용을 **텍스트, PDF, 또는 사진**으로
-     보냅니다 (워드·엑셀·한글 파일은 아직 미지원 — 2026-10-27 추가).
+  1. 담당자가 전용 텔레그램 봇(`wjpreed_deal_bot`)에게 딜 내용을 **텍스트, PDF, PPT(.pptx),
+     워드(.docx), 또는 사진**으로 보냅니다 (예전 .doc/.ppt·엑셀·한글은 아직 미지원).
   2. 텔레그램이 `api/telegram-webhook.js`(Vercel 서버 함수)를 호출합니다.
   3. 이 함수가 Claude API(Anthropic, `claude-haiku-5-5`)로 내용을 분석해 딜명·자산군·규모 등을
      뽑아내고, `deal_drafts` 테이블에 **초안**으로 저장합니다(라이브 테이블엔 아직 안 들어감).
      파일이 PDF/이미지면 텔레그램에서 받아온 파일을 그대로 Claude에 올려서(`document`/`image`
-     content block, base64) 읽힙니다 — 별도 OCR·파싱 라이브러리 없음.
+     content block, base64) 읽힙니다 — 별도 OCR·파싱 라이브러리 없음. PPT·워드는 비용 절감을
+     위해 다르게 처리합니다: `.docx`/`.pptx`는 사실 ZIP 압축 파일이라는 점을 이용해, npm
+     패키지 없이 내장 `zlib.inflateRawSync`로 직접 압축을 풀고(최소 ZIP 리더를
+     `api/telegram-webhook.js`에 직접 구현, `unzipAll`/`readZipEntry`) `<w:t>`(워드)·`<a:t>`
+     (PPT) 태그 안의 글자만 정규식으로 뽑아내 **일반 텍스트로** 분석합니다 — 이미지/문서로
+     읽히는 것보다 훨씬 저렴합니다. (2026-10-27 추가. Node가 없는 맥북 로컬 환경이라
+     Python으로 동일한 바이트 오프셋·정규식 로직을 재현해 교차 검증함 — ZIP 중앙 디렉터리/
+     로컬 헤더 오프셋, raw deflate 해제, 텍스트 추출 전부 확인됨.)
+  - **비용 절감 안내**: 그래도 가장 저렴한 건 파일 없이 텍스트로 핵심만 입력하는 것이라,
+    `/start`에 담당자가 채워서 보낼 수 있는 입력 양식(`TEXT_TEMPLATE_GUIDE`)을 보여주고,
+    파일로 보냈을 때도 접수 완료 메시지 끝에 "다음엔 텍스트로" 짧은 안내를 한 번 더 붙입니다.
   4. 담당자가 `deal-drafts.html`("텔레그램 접수" 메뉴) 화면에서 AI가 뽑은 값을 확인·수정한 뒤
      "딜로 등록"을 눌러야 비로소 실제 딜이 됩니다. "반려"를 누르면 딜이 되지 않습니다.
   - **AI가 자동으로 딜을 만들지 않습니다.** 분석이 틀릴 수 있다는 전제로, 사람 확인을 반드시

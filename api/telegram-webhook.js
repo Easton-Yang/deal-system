@@ -28,10 +28,40 @@
 //                             JSON 문자열. 예: {"123456789":"dongmin.yang"}
 //   APP_BASE_URL              (선택) 확인 화면 주소. 비우면 요청 호스트로 추정
 //
-// 텍스트 외에 PDF·이미지 파일도 받습니다 (딜 티저·제안서 사진 등). 텔레그램이
-// 보낸 파일을 받아 Claude에 그대로 읽혀서 같은 방식으로 항목을 뽑아냅니다.
-// 워드(.docx)·엑셀(.xlsx)·한글(.hwp) 등은 아직 지원하지 않습니다(텍스트로
-// 옮겨 보내거나 PDF로 내보내 보내달라고 안내합니다).
+// ── 파일 지원 범위와 비용 전략 ──────────────────────────────────
+// PDF·사진은 Claude에 그대로 올려서(이미지/문서로) 분석합니다 — 이 방식이
+// 가장 비쌉니다(비전 분석).
+// PPT(.pptx)·워드(.docx)는 npm 패키지 없이(이 프로젝트 전체의 "빌드 도구
+// 없음" 원칙 유지) 내장 zlib로 직접 압축을 풀어 글자만 뽑아낸 뒤, 그
+// 텍스트를 메시지 본문과 합쳐 '텍스트'로 분석합니다 — 같은 내용이어도
+// 파일을 이미지로 읽히는 것보다 훨씬 저렴합니다.
+// 예전 바이너리 형식(.doc/.ppt, 2007 이전)은 구조가 복잡해 지원하지
+// 않습니다 — .docx/.pptx로 저장해서 다시 보내거나 텍스트로 옮겨달라고
+// 안내합니다. 엑셀(.xlsx)·한글(.hwp)도 아직 미지원입니다.
+// 비용을 더 줄이려면(가장 저렴한 길은 텍스트 직접 입력) /start 안내에
+// 담당자가 핵심만 채워 보낼 수 있는 입력 양식을 함께 보여줍니다.
+
+const zlib = require('zlib');
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+// 파일 대신 텍스트로 핵심만 적어 보내면 AI 분석 비용이 훨씬 저렴합니다
+// (이미지/문서 분석이 아니라 일반 텍스트 분석이라 토큰이 적게 듭니다).
+// /start 에서 보여주고, 파일을 보냈을 때도 짧게 한 번 더 안내합니다.
+const TEXT_TEMPLATE_GUIDE =
+  '💡 비용을 아끼려면 파일 대신 아래 양식에 핵심만 채워서 텍스트로 보내주세요(아는 항목만, 나머지는 비워도 됩니다):\n\n' +
+  '딜명: \n' +
+  '자산군: (PE/VC·부동산·인프라·사모크레딧·상장주식·메자닌/비상장·공모주·원화채권·해외채권·기타)\n' +
+  '딜 규모: \n' +
+  '소개자/GP: \n' +
+  '투자수단: (대출·사채·보통주·우선주·CB·펀드지분·기타)\n' +
+  '통화/검토금액: \n' +
+  '만기: \n' +
+  '기대수익률: \n' +
+  '핵심 투자논거: \n' +
+  '주요 위험: \n\n' +
+  '(파일로 보내도 되지만, PPT·워드보다 PDF·사진이 더 비싸고, 가장 저렴한 건 이렇게 텍스트로 직접 입력하는 방법입니다)';
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -68,8 +98,9 @@ async function handler(req, res) {
 
   if (text === '/start') {
     await sendTelegramMessage(chatId,
-      '딜 접수 봇입니다. 딜 내용을 텍스트로 입력하거나, PDF·사진으로 보내주세요.\n' +
-      'AI가 내용을 정리해두고, 담당자가 확인한 뒤 시스템에 등록됩니다.');
+      '딜 접수 봇입니다. 딜 내용을 텍스트로 입력하거나, PDF·PPT·워드·사진으로 보내주세요.\n' +
+      'AI가 내용을 정리해두고, 담당자가 확인한 뒤 시스템에 등록됩니다.\n\n' +
+      TEXT_TEMPLATE_GUIDE);
     res.status(200).send('ok');
     return;
   }
@@ -105,41 +136,69 @@ async function handler(req, res) {
   }
 
   if (!text && !fileRef) {
-    await sendTelegramMessage(chatId, '텍스트, PDF, 또는 사진으로 딜 내용을 보내주세요.');
+    await sendTelegramMessage(chatId, '텍스트, PDF·PPT·워드 파일, 또는 사진으로 딜 내용을 보내주세요. (/start 로 입력 양식 보기)');
     res.status(200).send('ok');
     return;
   }
 
-  let fileContent = null;
+  let fileContent = null;       // Claude에 이미지/문서로 그대로 올릴 내용 (PDF·사진)
+  let extractedFileText = null; // 파일에서 글자만 뽑아낸 내용 (PPT·워드) — 텍스트로 분석해 더 저렴함
+
   if (fileRef) {
-    const isPdf = fileRef.mime_type === 'application/pdf';
+    const name = (fileRef.file_name || '').toLowerCase();
+    const isPdf = fileRef.mime_type === 'application/pdf' || name.endsWith('.pdf');
     const isImage = fileRef.mime_type.startsWith('image/');
-    if (!isPdf && !isImage) {
+    const isDocx = fileRef.mime_type === DOCX_MIME || name.endsWith('.docx');
+    const isPptx = fileRef.mime_type === PPTX_MIME || name.endsWith('.pptx');
+    const isLegacyOffice = !isDocx && !isPptx &&
+      (name.endsWith('.doc') || name.endsWith('.ppt') ||
+       fileRef.mime_type === 'application/msword' || fileRef.mime_type === 'application/vnd.ms-powerpoint');
+
+    if (isLegacyOffice) {
       await sendTelegramMessage(chatId,
-        `"${fileRef.file_name}" 형식은 아직 지원하지 않습니다. PDF나 사진으로 보내거나, 내용을 텍스트로 옮겨 보내주세요.`);
+        '예전 형식(.doc/.ppt)은 아직 지원하지 않습니다. "다른 이름으로 저장"할 때 .docx/.pptx로 저장해서 다시 보내주시거나, 핵심 내용을 텍스트로 적어 보내주세요.\n\n' + TEXT_TEMPLATE_GUIDE);
       res.status(200).send('ok');
       return;
     }
+
+    if (!isPdf && !isImage && !isDocx && !isPptx) {
+      await sendTelegramMessage(chatId,
+        `"${fileRef.file_name}" 형식은 아직 지원하지 않습니다. PDF·PPT·워드 파일이나 사진으로 보내거나, 내용을 텍스트로 옮겨 보내주세요.\n\n` + TEXT_TEMPLATE_GUIDE);
+      res.status(200).send('ok');
+      return;
+    }
+
     try {
-      const base64 = await downloadTelegramFile(fileRef.file_id);
-      fileContent = { kind: isPdf ? 'document' : 'image', mediaType: isPdf ? 'application/pdf' : fileRef.mime_type, base64 };
+      const buf = await downloadTelegramFile(fileRef.file_id);
+      if (isDocx) {
+        extractedFileText = extractDocxText(buf);
+      } else if (isPptx) {
+        extractedFileText = extractPptxText(buf);
+      } else {
+        fileContent = { kind: isPdf ? 'document' : 'image', mediaType: isPdf ? 'application/pdf' : fileRef.mime_type, base64: buf.toString('base64') };
+      }
     } catch (err) {
-      console.error('telegram-webhook file download error:', err);
-      await sendTelegramMessage(chatId, '파일을 받아오지 못했습니다 (20MB 이하 PDF·사진으로 다시 시도해주세요).');
+      console.error('telegram-webhook file error:', err);
+      await sendTelegramMessage(chatId,
+        '파일을 읽지 못했습니다 (20MB 이하 파일인지, .docx/.pptx 형식이 맞는지 확인해주세요). PDF·사진으로 다시 시도하시거나, 핵심 내용을 텍스트로 적어 보내주세요.');
       res.status(200).send('ok');
       return;
     }
   }
 
+  // PPT·워드에서 뽑아낸 글자는 원래 메시지(캡션) 텍스트와 합쳐서 그대로
+  // '텍스트'로 분석합니다. 사진/PDF처럼 이미지로 읽히는 것보다 저렴합니다.
+  const analysisText = extractedFileText ? [text, extractedFileText].filter(Boolean).join('\n\n') : text;
+
   try {
-    const parsed = await extractDealFields(text, fileContent);
+    const parsed = await extractDealFields(analysisText, fileContent);
 
     let userMap = {};
     try { userMap = JSON.parse(process.env.TELEGRAM_USER_MAP || '{}'); } catch (e) {}
     if (userMap[fromId]) parsed.assigned_to = userMap[fromId];
 
     await insertDraft({
-      raw_message: text || `[첨부파일] ${fileRef.file_name}`,
+      raw_message: analysisText || `[첨부파일] ${fileRef.file_name}`,
       telegram_user_id: fromId,
       telegram_username: fromUsername,
       telegram_chat_id: String(chatId),
@@ -147,11 +206,16 @@ async function handler(req, res) {
     });
 
     const base = process.env.APP_BASE_URL || `https://${req.headers.host}`;
-    await sendTelegramMessage(chatId,
+    let reply =
       '접수했습니다 ✅\n' +
       `딜명(추정): ${parsed.deal_name || '(미확인)'}\n` +
       `자산군(추정): ${parsed.asset_class || '(미확인)'}\n\n` +
-      `담당자 확인 후 등록됩니다 → ${base}/deal-drafts.html`);
+      `담당자 확인 후 등록됩니다 → ${base}/deal-drafts.html`;
+    // 파일로 보냈을 때만 짧게 한 번 더 비용 절감 안내 (텍스트로만 보냈으면 이미 가장 저렴한 방법을 쓴 것이라 생략)
+    if (fileRef) {
+      reply += '\n\n💡 다음엔 핵심만 텍스트로 적어 보내시면 더 빠르고 저렴해요 (/start 로 양식 다시 보기)';
+    }
+    await sendTelegramMessage(chatId, reply);
 
     res.status(200).send('ok');
   } catch (err) {
@@ -170,6 +234,7 @@ module.exports.config = { maxDuration: 60 };
 
 // AI(Claude)에게 메시지(와 첨부파일)를 분석시켜 딜 항목을 구조화된 값으로 받습니다.
 // fileContent: { kind: 'document'|'image', mediaType, base64 } 또는 null
+// (PPT·워드에서 뽑은 글자는 fileContent가 아니라 text 안에 이미 합쳐져 들어옵니다)
 async function extractDealFields(text, fileContent) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY 가 설정되지 않았습니다');
@@ -272,7 +337,7 @@ async function sendTelegramMessage(chatId, text) {
   }).catch(() => {});
 }
 
-// 텔레그램이 보관 중인 파일을 받아와 base64 문자열로 돌려줍니다.
+// 텔레그램이 보관 중인 파일을 받아와 Buffer로 돌려줍니다.
 // 봇 API 는 20MB 넘는 파일은 이 방식으로 못 받습니다(텔레그램 자체 제한).
 async function downloadTelegramFile(fileId) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -288,5 +353,99 @@ async function downloadTelegramFile(fileId) {
   if (!fileResp.ok) throw new Error('파일 다운로드 실패: ' + fileResp.status);
 
   const arrayBuffer = await fileResp.arrayBuffer();
-  return Buffer.from(arrayBuffer).toString('base64');
+  return Buffer.from(arrayBuffer);
+}
+
+// ── 최소 ZIP 리더 (.docx/.pptx 는 사실 ZIP 압축 파일입니다) ─────────
+// npm 패키지(예: jszip) 없이 이 프로젝트 전체의 "빌드 도구 없음" 원칙을
+// 지키려고, 내장 zlib(raw deflate)만으로 필요한 항목만 직접 풀어냅니다.
+// ZIP의 '중앙 디렉터리(central directory)'에서 파일 목록을 읽고, 필요한
+// 항목만 '로컬 파일 헤더' 위치로 찾아가 압축을 풉니다.
+function unzipAll(buf) {
+  // 파일 맨 끝의 EOCD(End Of Central Directory) 레코드를 찾습니다.
+  // 보통 파일 끝 22바이트 근처에 있지만, 주석이 있으면 더 앞쪽일 수
+  // 있어 뒤에서부터 최대 66KB 범위를 탐색합니다(ZIP 주석 최대 길이).
+  const searchStart = Math.max(0, buf.length - 22 - 65557);
+  let eocdOffset = -1;
+  for (let i = buf.length - 22; i >= searchStart; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset === -1) throw new Error('ZIP 구조를 읽을 수 없습니다(.docx/.pptx 파일이 맞는지 확인 필요)');
+
+  const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+  const cdEntries = buf.readUInt16LE(eocdOffset + 10);
+
+  const entries = {};
+  let offset = cdOffset;
+  for (let i = 0; i < cdEntries; i++) {
+    if (buf.readUInt32LE(offset) !== 0x02014b50) break; // 중앙 디렉터리 시그니처 불일치 → 중단
+    const method = buf.readUInt16LE(offset + 10);
+    const compSize = buf.readUInt32LE(offset + 20);
+    const nameLen = buf.readUInt16LE(offset + 28);
+    const extraLen = buf.readUInt16LE(offset + 30);
+    const commentLen = buf.readUInt16LE(offset + 32);
+    const localHeaderOffset = buf.readUInt32LE(offset + 42);
+    const name = buf.toString('utf8', offset + 46, offset + 46 + nameLen);
+    entries[name] = { method, compSize, localHeaderOffset };
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return { buf, entries };
+}
+
+function readZipEntry(zip, name) {
+  const e = zip.entries[name];
+  if (!e) return null;
+  const buf = zip.buf;
+  // 로컬 파일 헤더는 중앙 디렉터리와 필드 길이가 다를 수 있어 따로 읽어야 합니다.
+  const lfNameLen = buf.readUInt16LE(e.localHeaderOffset + 26);
+  const lfExtraLen = buf.readUInt16LE(e.localHeaderOffset + 28);
+  const dataStart = e.localHeaderOffset + 30 + lfNameLen + lfExtraLen;
+  const compData = buf.slice(dataStart, dataStart + e.compSize);
+  if (e.method === 0) return compData;               // 저장(비압축)
+  if (e.method === 8) return zlib.inflateRawSync(compData); // DEFLATE
+  throw new Error('지원하지 않는 압축 방식입니다 (method ' + e.method + ')');
+}
+
+function decodeXmlEntities(s) {
+  return s
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&amp;/g, '&'); // 다른 엔티티들을 먼저 풀어야 &amp; 이 마지막에 안전하게 풀림
+}
+
+// word/document.xml 에서 문단 단위로 글자만 뽑아냅니다. <w:t>텍스트</w:t> 가
+// 실제 글자가 들어있는 태그이고, </w:p> 가 문단 끝입니다.
+function extractDocxText(buf) {
+  const zip = unzipAll(buf);
+  const xmlBuf = readZipEntry(zip, 'word/document.xml');
+  if (!xmlBuf) throw new Error('word/document.xml 을 찾을 수 없습니다 (.docx 형식이 맞는지 확인 필요)');
+  const xml = xmlBuf.toString('utf8');
+
+  const paragraphs = xml.split('</w:p>');
+  const lines = paragraphs
+    .map(p => [...p.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map(m => decodeXmlEntities(m[1])).join(''))
+    .filter(line => line.trim());
+  return lines.join('\n').slice(0, 8000); // 너무 길면 AI 호출 비용·시간이 커지므로 적당히 자름
+}
+
+// ppt/slides/slideN.xml 각각에서 글자를 뽑아 슬라이드 번호와 함께 모읍니다.
+// <a:t>텍스트</a:t> 가 실제 글자가 들어있는 태그입니다.
+function extractPptxText(buf) {
+  const zip = unzipAll(buf);
+  const slideNames = Object.keys(zip.entries)
+    .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/slide(\d+)\.xml/)[1], 10);
+      const nb = parseInt(b.match(/slide(\d+)\.xml/)[1], 10);
+      return na - nb;
+    });
+  if (slideNames.length === 0) throw new Error('슬라이드를 찾을 수 없습니다 (.pptx 형식이 맞는지 확인 필요)');
+
+  const slides = slideNames.map((name, i) => {
+    const xml = readZipEntry(zip, name).toString('utf8');
+    const text = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => decodeXmlEntities(m[1])).join(' ');
+    return text.trim() ? `[슬라이드 ${i + 1}] ${text.trim()}` : '';
+  }).filter(Boolean);
+  return slides.join('\n').slice(0, 8000); // 너무 길면 AI 호출 비용·시간이 커지므로 적당히 자름
 }

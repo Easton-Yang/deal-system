@@ -92,6 +92,16 @@ function draftCardHtml(d) {
       <span class="badge bg-warning text-dark">확인 대기</span>
     </div>
     <div class="detail-section-body">
+      ${(d._dupMatches && d._dupMatches.length) ? `
+      <div class="alert alert-warning py-2 px-3 mb-3 small">
+        <i class="fas fa-triangle-exclamation me-1"></i><strong>비슷한 딜이 있어요.</strong> 중복 접수인지 확인해 주세요.
+        <ul class="mb-0 mt-1 ps-3">
+          ${d._dupMatches.map(m => m.type === 'deal'
+            ? `<li><a href="deal-detail.html?id=${m.id}" target="_blank">${escapeHtml(m.deal_name)}</a> — 현재 단계: ${escapeHtml(m.current_stage || '-')} · 접수일: ${escapeHtml(m.intake_date || '-')} · 담당자: ${escapeHtml(m.assigned_to || '-')}</li>`
+            : `<li>${escapeHtml(m.deal_name)} — 다른 텔레그램 접수 대기중인 건</li>`
+          ).join('')}
+        </ul>
+      </div>` : ''}
       <div class="mb-3 p-2 bg-light border rounded">
         <div class="text-muted small mb-1">원문</div>
         <div style="white-space:pre-wrap">${escapeHtml(d.raw_message)}</div>
@@ -185,6 +195,12 @@ async function loadDrafts() {
     if (drafts.length === 0) {
       listEl.innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x mb-3"></i><p>확인 대기 중인 초안이 없습니다.</p></div>';
     } else {
+      // 중복 경고: 기존 딜 + 다른 대기중인 초안과 딜명이 비슷한지 미리 한 번만 비교해 둡니다.
+      const existingDeals = await getDealsForDuplicateCheck();
+      drafts.forEach(d => {
+        const otherDrafts = drafts.filter(o => o.id !== d.id);
+        d._dupMatches = findSimilarDeals((d.parsed || {}).deal_name, existingDeals, otherDrafts);
+      });
       listEl.innerHTML = drafts.map(draftCardHtml).join('');
     }
   } catch (err) {

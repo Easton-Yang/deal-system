@@ -9,6 +9,12 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-11.0 2026-10-27  텔레그램 접수 화면에 "비슷한 딜이 있어요" 중복 경고 추가.
+//                         딜명을 기존 딜 전체(화면에서 숨긴 과거분 포함) + 다른
+//                         대기중인 초안과 글자 2개씩 겹치는 정도(Dice 유사도)로
+//                         비교해 50% 이상 겹치면 경고로 보여줌. AI가 자동으로
+//                         막지는 않고 담당자가 보고 판단(기존 "AI는 초안만, 등록은
+//                         사람이" 방식과 동일). 화면·공통함수 추가라 앞자리 올림
 //   Beta-10.1 2026-10-27  딜 상세 '기본 정보'에 당사 검토금액 표시 추가
 //                         (지금까진 투자조건 섹션 편집창에서만 보였음). 통화별
 //                         단위(억/백만/천만)로 포맷하는 formatReviewAmount()를
@@ -82,7 +88,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-10.1';
+const APP_VERSION = 'Beta-11.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -365,6 +371,67 @@ async function rejectDraft(draftId, reason) {
     .update({ status: '반려', reject_reason: reason || null, reviewed_by: currentUserName(), reviewed_at: now })
     .eq('id', draftId);
   if (error) throw error;
+}
+
+// ── 중복 딜 탐지 (Beta-11.0) ──────────────────────────────────────
+// 텔레그램 접수 확인 화면에서 "비슷한 딜이 있어요"를 보여주기 위한 용도입니다.
+// 자동으로 막지는 않습니다 — 이름이 비슷해도 실제로 다른 딜일 수 있어서,
+// 최종 판단은 항상 담당자가 합니다(경고만 표시, confirmAsDeal을 가로막지 않음).
+
+function normalizeDealName(s) {
+  return (s || '').toLowerCase().replace(/[\s.,\-_()\[\]]/g, '');
+}
+
+// 글자를 2개씩 끊어 겹치는 비율을 봅니다(Dice 유사도). 띄어쓰기·괄호 표기가
+// 달라도 같은 딜이면 대부분 꽤 높게 나옵니다. 완벽한 방법은 아니라서
+// "경고"로만 쓰고 자동 차단에는 쓰지 않습니다.
+function dealNameSimilarity(a, b) {
+  a = normalizeDealName(a);
+  b = normalizeDealName(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+  const grams = (s) => { const g = []; for (let i = 0; i < s.length - 1; i++) g.push(s.slice(i, i + 2)); return g; };
+  const ga = grams(a), gb = grams(b);
+  const count = {};
+  ga.forEach(g => count[g] = (count[g] || 0) + 1);
+  let common = 0;
+  gb.forEach(g => { if (count[g] > 0) { common++; count[g]--; } });
+  return (2 * common) / (ga.length + gb.length);
+}
+
+// 중복 비교용으로 기존 딜을 가볍게 가져옵니다(필요한 열만).
+// DISPLAY_FROM_DATE로 화면에서 숨긴 과거 딜도 포함합니다 — 화면에 안 보여도
+// 실제로 있는 딜이라 중복 체크에서는 빼면 안 됩니다.
+async function getDealsForDuplicateCheck() {
+  const cols = ['id', 'deal_name', 'introducer_gp', 'current_stage', 'intake_date', 'assigned_to'];
+  if (DEMO_MODE) {
+    return demoGet('deals_v3').map(d => {
+      const picked = {};
+      cols.forEach(c => picked[c] = d[c]);
+      return picked;
+    });
+  }
+  const { data, error } = await getSB().from('deals').select(cols.join(','));
+  if (error) throw error;
+  return data;
+}
+
+// dealName과 비슷한 기존 딜·다른 대기중인 초안을 찾아 점수 높은 순으로 최대 3건 돌려줍니다.
+// candidates: getDealsForDuplicateCheck() 결과, otherDrafts: 비교 대상(자기 자신은 뺀) 대기중인 초안 목록
+function findSimilarDeals(dealName, candidates, otherDrafts, threshold = 0.5) {
+  if (!dealName || !dealName.trim()) return [];
+  const scored = [];
+  (candidates || []).forEach(c => {
+    const score = dealNameSimilarity(dealName, c.deal_name);
+    if (score >= threshold) scored.push({ type: 'deal', score, ...c });
+  });
+  (otherDrafts || []).forEach(d => {
+    const name = (d.parsed || {}).deal_name;
+    const score = dealNameSimilarity(dealName, name);
+    if (score >= threshold) scored.push({ type: 'draft', score, id: d.id, deal_name: name });
+  });
+  return scored.sort((a, b) => b.score - a.score).slice(0, 3);
 }
 
 async function deleteDeal(id) {

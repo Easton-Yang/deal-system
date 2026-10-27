@@ -273,28 +273,34 @@
   // 돌려주는 deals 목록 — 딜마다 어느 단계까지 도달했는지가 stopStage로 들어있음).
   // 클릭하면 그 딜의 상세화면으로 이동합니다.
 
-  // 한 단계에 쌓일 공이 많으면 한 줄에 다 못 들어가므로 여러 줄로 쌓습니다
-  // (바닥 줄부터 채움). 각 줄의 폭은 그 높이에서 실제 역삼각형 폭을 씁니다.
+  // 한 단계에 쌓일 공들을 그 띠 안에 무작위로 흩뿌립니다(한 줄로 가지런히
+  // 세우지 않음). 공끼리 너무 겹치지 않도록, 자리마다 몇 번 다시 뽑아보고
+  // (거부 샘플링) 그래도 안 되면 그냥 놓습니다 — 약간 겹쳐도 장식용이라 무방.
   function funnelLandingSlots(geo, stageIdx, count) {
     if (count <= 0) return [];
     const b = geo.bands[stageIdx];
-    const spacing = 10;
-    const midW = Math.max(((b.topX2 - b.topX1) + (b.botX2 - b.botX1)) / 2, 14);
-    const cols = Math.max(1, Math.floor(midW / spacing));
-    const rows = Math.max(1, Math.ceil(count / cols));
-    const bandH = Math.max(b.yBot - b.yTop, 1);
-    const rowSpacing = Math.min(spacing, bandH / rows);
+    const pad = 6;
+    const yMin = b.yTop + pad, yMax = Math.max(b.yBot - pad, yMin + 1);
+    const minDist = 10.5;
+    const maxAttempts = 40;
+    const randomPoint = () => {
+      const y = yMin + Math.random() * (yMax - yMin);
+      const w = Math.max(funnelWidthAtY(geo, y) - pad * 2, 10);
+      const x = geo.width / 2 + (Math.random() - 0.5) * w;
+      return { x, y };
+    };
     const slots = [];
-    let remaining = count;
-    for (let r = 0; r < rows && remaining > 0; r++) {
-      const inRow = Math.min(cols, remaining);
-      const rowY = b.yBot - 6 - r * rowSpacing;
-      const rowW = Math.max(funnelWidthAtY(geo, rowY), 14);
-      const x0 = (geo.width - rowW) / 2;
-      for (let c = 0; c < inRow; c++) {
-        slots.push({ x: x0 + rowW * ((c + 1) / (inRow + 1)), y: rowY });
+    for (let k = 0; k < count; k++) {
+      let picked = null;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const p = randomPoint();
+        const ok = slots.every(s => {
+          const dx = s.x - p.x, dy = s.y - p.y;
+          return dx * dx + dy * dy >= minDist * minDist;
+        });
+        if (ok) { picked = p; break; }
       }
-      remaining -= inRow;
+      slots.push(picked || randomPoint());
     }
     return slots;
   }
@@ -310,73 +316,63 @@
   }
 
   let funnelEpoch = 0;
-  let funnelCycleTimer = null;
 
-  // dealBalls: common.js getDealFunnelStats()의 deals 목록 ({id, deal_name, stopStage})
+  // dealBalls: common.js getDealFunnelStats()의 deals 목록 ({id, deal_name, stopStage}).
+  // 공 애니메이션은 화면에 뜰 때(또는 기간을 바꿀 때) 딱 한 번만 재생되고, 다 떨어진
+  // 뒤에는 그 자리에 그대로 멈춰 있습니다(반복 재생 안 함).
   function startFunnelBallLoop(dealBalls, geo, ballLayer, tooltipEl) {
-    funnelEpoch++;
+    funnelEpoch++; // 기간을 바꿔 다시 부르면, 이전에 떨어지던 중인 공은 여기서 멈춥니다
     const myEpoch = funnelEpoch;
-    if (funnelCycleTimer) clearTimeout(funnelCycleTimer);
     const spawnX = geo.width / 2, spawnY = geo.arrowsH - 6;
 
-    function runCycle() {
-      if (funnelEpoch !== myEpoch) return;
-      ballLayer.innerHTML = '';
-      if (tooltipEl) tooltipEl.classList.remove('show'); // 주기가 바뀌며 공이 사라질 때 말풍선도 같이 닫음
-      const total = dealBalls.length;
-      if (total === 0) { funnelCycleTimer = setTimeout(runCycle, 4200); return; }
+    ballLayer.innerHTML = '';
+    if (tooltipEl) tooltipEl.classList.remove('show');
+    const total = dealBalls.length;
+    if (total === 0) return;
 
-      // 공이 많을 때(딜이 많은 기간)도 한 주기가 너무 늘어지지 않게 간격을 자동으로 줄입니다.
-      const stagger = Math.max(12, Math.min(140, 1300 / total));
+    // 공이 많을 때(딜이 많은 기간)도 등장이 너무 늘어지지 않게 간격을 자동으로 줄입니다.
+    const stagger = Math.max(12, Math.min(140, 1300 / total));
 
-      const byStage = {};
-      dealBalls.forEach(db => { (byStage[db.stopStage] = byStage[db.stopStage] || []).push(db); });
-      const slotsByStage = {};
-      Object.keys(byStage).forEach(s => { slotsByStage[s] = funnelLandingSlots(geo, Number(s), byStage[s].length); });
-      const slotCursor = {};
+    const byStage = {};
+    dealBalls.forEach(db => { (byStage[db.stopStage] = byStage[db.stopStage] || []).push(db); });
+    const slotsByStage = {};
+    Object.keys(byStage).forEach(s => { slotsByStage[s] = funnelLandingSlots(geo, Number(s), byStage[s].length); });
+    const slotCursor = {};
 
-      let maxStop = 0;
-      dealBalls.forEach((db, j) => {
-        maxStop = Math.max(maxStop, db.stopStage);
-        const cursor = slotCursor[db.stopStage] || 0;
-        slotCursor[db.stopStage] = cursor + 1;
-        const landing = slotsByStage[db.stopStage][cursor];
+    dealBalls.forEach((db, j) => {
+      const cursor = slotCursor[db.stopStage] || 0;
+      slotCursor[db.stopStage] = cursor + 1;
+      const landing = slotsByStage[db.stopStage][cursor];
 
-        const el = document.createElement('div');
-        el.className = 'funnel-ball';
-        el.style.left = spawnX + 'px';
-        el.style.top = spawnY + 'px';
-        // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
-        // 공이 다시 생기는 주기 안에 못 보일 수 있었습니다 — Beta-11.7).
-        // textContent로 넣으므로 HTML 삽입이 아니라 escapeHtml 없이도 안전합니다.
-        el.addEventListener('mouseenter', () => {
-          if (!tooltipEl) return;
-          tooltipEl.textContent = db.deal_name || '';
-          tooltipEl.style.left = el.style.left;
-          tooltipEl.style.top = el.style.top;
-          tooltipEl.classList.add('show');
-        });
-        el.addEventListener('mouseleave', () => {
-          if (tooltipEl) tooltipEl.classList.remove('show');
-        });
-        el.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          window.location.href = `deal-detail.html?id=${db.id}`;
-        });
-        ballLayer.appendChild(el);
-
-        const waypoints = [];
-        for (let i = 0; i <= db.stopStage; i++) {
-          waypoints.push(i === db.stopStage ? landing : { x: geo.width / 2, y: geo.bands[i].yBot - 2 });
-        }
-        setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * stagger);
+      const el = document.createElement('div');
+      el.className = 'funnel-ball';
+      el.style.left = spawnX + 'px';
+      el.style.top = spawnY + 'px';
+      // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
+      // 안 보일 수 있었습니다 — Beta-11.7). textContent로 넣으므로 HTML 삽입이
+      // 아니라 escapeHtml 없이도 안전합니다.
+      el.addEventListener('mouseenter', () => {
+        if (!tooltipEl) return;
+        tooltipEl.textContent = db.deal_name || '';
+        tooltipEl.style.left = el.style.left;
+        tooltipEl.style.top = el.style.top;
+        tooltipEl.classList.add('show');
       });
+      el.addEventListener('mouseleave', () => {
+        if (tooltipEl) tooltipEl.classList.remove('show');
+      });
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        window.location.href = `deal-detail.html?id=${db.id}`;
+      });
+      ballLayer.appendChild(el);
 
-      const spawnWindow = total * stagger;
-      const fallMs = (maxStop + 2) * 190;
-      funnelCycleTimer = setTimeout(runCycle, Math.max(3000, spawnWindow + fallMs + 1600));
-    }
-    runCycle();
+      const waypoints = [];
+      for (let i = 0; i <= db.stopStage; i++) {
+        waypoints.push(i === db.stopStage ? landing : { x: geo.width / 2, y: geo.bands[i].yBot - 2 });
+      }
+      setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * stagger);
+    });
   }
 
   async function loadFunnel(periodValue) {

@@ -9,6 +9,7 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-14.1 2026-10-28  상단 브랜드 클릭 시 대시보드 이동. 진행경과 소요시간 표시·계산 제거.
 //   Beta-14.0 2026-10-27  왼쪽 하단 마이페이지 추가: 프로필(이름·부서·직함), 본인 비밀번호 변경.
 //                         현재 비밀번호 재검증 후 Auth로 변경하며 로그인 아이디는 유지.
 //   Beta-13.4 2026-10-27  팀원 4명의 표시 이름을 한글로 통일. 저장 아이디·필터 값은 유지.
@@ -203,7 +204,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-14.0';
+const APP_VERSION = 'Beta-14.1';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -1000,13 +1001,13 @@ function renderNav(activePage) {
   const target = document.getElementById('sidebar');
   if (!target) return;
   target.innerHTML = `
-    <div class="sidebar-brand">
+    <a class="sidebar-brand sidebar-home" href="index.html" aria-label="딜 관리 시스템 대시보드로 이동">
       <div class="brand-icon"><i class="fas fa-briefcase"></i></div>
       <div>
         <div class="brand-title">딜 관리 시스템</div>
         <div class="brand-sub">${modeLabel}</div>
       </div>
-    </div>
+    </a>
     <ul class="nav flex-column mt-3">${items}</ul>
     <div class="sidebar-footer">
       <i class="fas fa-user-circle me-2"></i>

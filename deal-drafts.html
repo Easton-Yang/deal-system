@@ -114,8 +114,8 @@ function draftCardHtml(d) {
         </div>
 
         <div class="col-md-4">
-          <label class="form-label">딜 규모(원)</label>
-          <input type="number" class="form-control" id="f_size_${d.id}" value="${escapeHtml(p.deal_size || '')}">
+          <label class="form-label">딜 규모(억원)</label>
+          <input type="number" class="form-control" step="0.1" id="f_size_${d.id}" value="${escapeHtml(p.deal_size ? p.deal_size/1e8 : '')}">
         </div>
         <div class="col-md-4">
           <label class="form-label">소개자 / GP</label>
@@ -141,8 +141,8 @@ function draftCardHtml(d) {
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label">당사 검토금액(원)</label>
-          <input type="number" class="form-control" id="f_reviewamt_${d.id}" value="${escapeHtml(p.review_amount || '')}">
+          <label class="form-label">당사 검토금액(억원)</label>
+          <input type="number" class="form-control" step="0.1" id="f_reviewamt_${d.id}" value="${escapeHtml(p.review_amount ? p.review_amount/1e8 : '')}">
         </div>
         <div class="col-md-3">
           <label class="form-label">만기 / 기대수익률</label>
@@ -221,11 +221,11 @@ function readDraftForm(id) {
     asset_class:        val('asset'),
     assigned_to:        val('assignee'),
     current_stage:      '접수',
-    deal_size:          Number(val('size')) || null,
+    deal_size:          Math.round(Number(val('size')) * 1e8) || null,
     introducer_gp:      val('intro').trim() || null,
     investment_vehicle: val('vehicle') || null,
     currency:           val('currency') || null,
-    review_amount:      Number(val('reviewamt')) || null,
+    review_amount:      Math.round(Number(val('reviewamt')) * 1e8) || null,
     maturity_term:      val('maturity').trim() || null,
     expected_return:    val('return').trim() || null,
     investment_thesis:  val('thesis').trim() || null,

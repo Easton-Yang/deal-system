@@ -81,8 +81,8 @@
                   <label class="form-label">딜 규모 (투자금액)</label>
                   <div class="input-group">
                     <input type="number" id="dealSize" class="form-control"
-                      placeholder="예) 5000000000" min="0">
-                    <span class="input-group-text">원</span>
+                      placeholder="예) 50" min="0" step="0.1">
+                    <span class="input-group-text">억원</span>
                   </div>
                   <div class="form-text" id="dealSizePreview" style="color:#1a237e;font-weight:600"></div>
                 </div>
@@ -221,12 +221,12 @@ function selectStage(stage) {
   });
 }
 
-// 딜 규모 한글 미리보기
+// 딜 규모 미리보기 (입력은 억원 단위, 실제 저장은 원 단위로 환산)
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dealSize').addEventListener('input', function() {
     const preview = document.getElementById('dealSizePreview');
     const val = Number(this.value);
-    preview.textContent = val > 0 ? '→ ' + formatCurrency(val) : '';
+    preview.textContent = val > 0 ? '→ ' + Math.round(val * 1e8).toLocaleString() + '원' : '';
   });
 });
 
@@ -252,7 +252,7 @@ document.getElementById('dealForm').addEventListener('submit', async (e) => {
       intake_date:     document.getElementById('intakeDate').value,
       asset_class:     document.getElementById('assetClass').value,
       assigned_to:     document.getElementById('assignedTo').value,
-      deal_size:       Number(document.getElementById('dealSize').value) || null,
+      deal_size:       Math.round(Number(document.getElementById('dealSize').value) * 1e8) || null,
       introducer_gp:   document.getElementById('introducerGp').value.trim() || null,
       current_stage:   selectedStage,
       first_opinion:   document.getElementById('firstOpinion').value.trim() || null,

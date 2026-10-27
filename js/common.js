@@ -9,13 +9,17 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-10.1 2026-10-27  딜 상세 '기본 정보'에 당사 검토금액 표시 추가
+//                         (지금까진 투자조건 섹션 편집창에서만 보였음). 통화별
+//                         단위(억/백만/천만)로 포맷하는 formatReviewAmount()를
+//                         common.js에 추가. 화면 로직 추가라 뒷자리 +1
 //   Beta-10.0 2026-10-27  자산군 명칭 변경: 'PE/VC'→'기업 Equity',
 //                         '사모크레딧'→'기업 Debt' (분류 10종·순서는 그대로).
 //                         common.js(ASSET_CLASSES·ASSET_COLOR), 텔레그램 봇
 //                         AI 추출 enum, DB 제약, 엑셀이관 매핑, 데모데이터
-//                         전부 반영. 기존 DB 데이터는 `자산군_용어변경_SQL.sql`
-//                         로 함께 바꿔야 함(아직 미실행). 화면 전역에 쓰이는
-//                         핵심 분류값 변경 + DB 데이터 변경이라 앞자리 올림
+//                         전부 반영. 기존 DB 데이터도 `자산군_용어변경_SQL.sql`
+//                         로 함께 반영 완료. 화면 전역에 쓰이는 핵심 분류값
+//                         변경 + DB 데이터 변경이라 앞자리 올림
 //   Beta-9.5  2026-10-27  화면에 보여줄 딜 시작일 추가(config.js의
 //                         DISPLAY_FROM_DATE = '2026-10-01'). 엑셀이관 과거
 //                         247건을 목록·대시보드·칸반·진행경과·주간보고에서
@@ -78,7 +82,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-10.0';
+const APP_VERSION = 'Beta-10.1';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -572,6 +576,17 @@ function formatCurrency(amount) {
   if (n >= 1e8)  return `${(n/1e8).toFixed(0)}억원`;
   if (n >= 1e4)  return `${(n/1e4).toFixed(0)}만원`;
   return `${n.toLocaleString()}원`;
+}
+
+// 당사 검토금액 표시용. deal_size(항상 원 단위)와 달리 review_amount는
+// 저장된 통화(currency)의 최소 단위 그대로이므로 formatCurrency(원 단위
+// 전용)를 못 쓰고, currencyUnit()으로 그 통화에 맞는 단위를 골라 보여줍니다.
+function formatReviewAmount(deal) {
+  if (!deal || !deal.review_amount) return '-';
+  const unit = currencyUnit(deal.currency || 'KRW');
+  const amt = deal.review_amount / unit.factor;
+  const amtStr = Number.isInteger(amt) ? amt.toLocaleString() : amt.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return unit.label ? `${amtStr}${unit.label}` : `${amtStr} ${deal.currency || ''}`.trim();
 }
 
 // ── 다음 액션 기한 계산 ──────────────────────────────────────────

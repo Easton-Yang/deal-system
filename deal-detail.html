@@ -694,6 +694,7 @@ function render() {
               </div>
               <div class="col-md-6">
                 <div class="info-row"><div class="info-label">딜 규모</div><div class="info-value"><strong>${formatCurrency(deal.deal_size)}</strong></div></div>
+                <div class="info-row"><div class="info-label">당사 검토금액</div><div class="info-value">${formatReviewAmount(deal)}</div></div>
                 <div class="info-row"><div class="info-label">소개자/GP</div><div class="info-value">${escapeHtml(deal.introducer_gp || '-')}</div></div>
                 <div class="info-row"><div class="info-label">최종결과</div><div class="info-value">${resultBadge(deal.final_result) || '<span class="text-muted">미정</span>'}</div></div>
                 <div class="info-row"><div class="info-label">최종수정</div><div class="info-value text-muted">${formatDateTime(deal.updated_at)}</div></div>

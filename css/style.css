@@ -140,6 +140,19 @@ body {
 .stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
 .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
+/* ── 딜 퍼널 공 애니메이션 (대시보드) ── */
+.funnel-ball {
+  position: absolute;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ffffff, #1a237e 75%);
+  box-shadow: 0 1px 2px rgba(0,0,0,.35);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity .25s ease, left .19s linear, top .19s linear;
+}
+.funnel-ball.show { opacity: 1; }
+
 /* ── 테이블 ── */
 .table { font-size: 13.5px; }
 .table thead th {

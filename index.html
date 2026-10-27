@@ -192,8 +192,10 @@
   document.getElementById('statThisMonth').textContent = thisMonth.length;
 
   // 딜 소싱 → 투자 전환 퍼널
-  // 사용자가 올려준 참고 이미지 스타일(위에서 아래로 화살표가 모여들고, 하늘색에서
-  // 보라색으로 짙어지는 깔때기 + 번호 원이 세로선으로 이어진 표)을 따라 그립니다.
+  // 색은 하늘색(위, 딜 소싱)에서 보라색(아래, 투자확정)으로 점점 짙어지는
+  // 그라데이션을 씁니다. 리본처럼 보이도록 각 띠에 세로 그라데이션 +
+  // 윗면 하이라이트 선 + 그림자를 넣었습니다(참고 이미지는 디자인 느낌만
+  // 참고했고 그대로 그리지 않았습니다 — 저작권이 있는 스톡 이미지입니다).
   function hexToRgb(hex) {
     const n = parseInt(hex.slice(1), 16);
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -205,36 +207,129 @@
     const bl = Math.round(ca.b + (cb.b - ca.b) * t);
     return `rgb(${r},${g},${bl})`;
   }
-  // 하늘색(위, 딜 소싱) → 보라색(아래, 투자확정)으로 점점 짙어지는 그라데이션
+  // rgb(...) 문자열을 흰색 쪽으로 amt(0~1)만큼 밝게 만듭니다(띠 윗부분 광택용).
+  function lightenRgb(rgbStr, amt) {
+    const [r, g, b] = rgbStr.match(/\d+/g).map(Number);
+    const mix = (c) => Math.max(0, Math.min(255, Math.round(c + (255 - c) * amt)));
+    return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+  }
   const funnelColors = FUNNEL_STAGES.map((_, i) => lerpColor('#8ecae6', '#5e3a8c', i / (FUNNEL_STAGES.length - 1)));
 
-  function buildFunnelSvg(stages) {
+  // 띠(사다리꼴)들의 좌표를 미리 계산해 둡니다 — SVG를 그릴 때도, 공 애니메이션이
+  // 각 단계의 정확한 위치로 떨어지게 할 때도 똑같은 좌표를 씁니다.
+  function computeFunnelGeometry(stages) {
     const width = 220, segH = 42, gap = 4, arrowsH = 26;
-    const funnelH = stages.length * segH + (stages.length - 1) * gap;
-    const height = arrowsH + funnelH;
     const maxW = width - 16;
     const clamp = (pct) => Math.max(pct, 10); // 0%여도 띠가 눈에 보이게 최소 폭 확보
-    const parts = [];
-
-    // 위에서 모여드는 화살표 3개 (딜이 들어오는 느낌)
-    [0.28, 0.5, 0.72].forEach(f => {
-      const x = width * f;
-      parts.push(`<path d="M ${x - 8},0 L ${x},14 L ${x + 8},0" stroke="#5c6bc0" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>`);
-    });
-
     let y = arrowsH;
-    stages.forEach((s, i) => {
+    const bands = stages.map((s, i) => {
       const topPct = clamp(s.pct);
       const nextPct = i < stages.length - 1 ? clamp(stages[i + 1].pct) : topPct;
       const topW = (topPct / 100) * maxW, botW = (nextPct / 100) * maxW;
       const topX1 = (width - topW) / 2, topX2 = topX1 + topW;
       const botX1 = (width - botW) / 2, botX2 = botX1 + botW;
       const yTop = y, yBot = y + segH;
-      parts.push(`<polygon points="${topX1},${yTop} ${topX2},${yTop} ${botX2},${yBot} ${botX1},${yBot}" fill="${funnelColors[i]}"/>`);
-      parts.push(`<text x="${width / 2}" y="${yTop + segH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${s.count}</text>`);
       y += segH + gap;
+      return { topX1, topX2, botX1, botX2, yTop, yBot };
     });
-    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${parts.join('')}</svg>`;
+    const height = arrowsH + stages.length * segH + (stages.length - 1) * gap;
+    return { width, height, arrowsH, segH, gap, bands };
+  }
+
+  function buildFunnelSvgMarkup(stages, geo) {
+    const { width, height, bands } = geo;
+    const parts = [];
+    parts.push('<defs>' + funnelColors.map((c, i) =>
+      `<linearGradient id="fg${i}" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0" stop-color="${lightenRgb(c, 0.35)}"/>
+         <stop offset="1" stop-color="${c}"/>
+       </linearGradient>`).join('') + '</defs>');
+
+    // 위에서 모여드는 화살표 3개 (딜이 들어오는 느낌)
+    [0.28, 0.5, 0.72].forEach(f => {
+      const x = width * f;
+      parts.push(`<path d="M ${x - 8},0 L ${x},14 L ${x + 8},0" stroke="#5c6bc0" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>`);
+    });
+
+    bands.forEach((b, i) => {
+      parts.push(`<polygon points="${b.topX1},${b.yTop} ${b.topX2},${b.yTop} ${b.botX2},${b.yBot} ${b.botX1},${b.yBot}" fill="url(#fg${i})"/>`);
+      parts.push(`<line x1="${b.topX1 + 5}" y1="${b.yTop + 4}" x2="${b.topX2 - 5}" y2="${b.yTop + 4}" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-linecap="round"/>`);
+      parts.push(`<text x="${width / 2}" y="${(b.yTop + b.yBot) / 2 + 4}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${stages[i].count}</text>`);
+    });
+    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="filter:drop-shadow(0 4px 8px rgba(26,35,126,.18))">${parts.join('')}</svg>`;
+  }
+
+  // ── 공 흐르는 애니메이션 ──────────────────────────────────────
+  // 실제 딜 수를 그대로 공 개수로 쓰면(수백 개) 너무 많아지므로, 매번 "공 10개"를
+  // 기준으로 정규화해서 보여줍니다. 10개가 들어가서 각 단계를 통과할 때마다
+  // 실제 전환율만큼만 남고(반올림), 더 못 간 공은 그 단계에 쌓입니다 —
+  // 즉 각 단계에 쌓이는 공 개수 비율이 실제 전환율과 같습니다.
+  function computeBallStopStages(stages) {
+    const survivors = stages.map(s => Math.round(10 * s.pct / 100));
+    survivors[0] = 10;
+    for (let i = 1; i < survivors.length; i++) survivors[i] = Math.min(survivors[i], survivors[i - 1]);
+    const stayed = survivors.map((v, i) => i < survivors.length - 1 ? v - survivors[i + 1] : v);
+    const stopStages = [];
+    stayed.forEach((cnt, stageIdx) => { for (let k = 0; k < cnt; k++) stopStages.push(stageIdx); });
+    return stopStages;
+  }
+
+  function funnelLandingSlots(geo, stageIdx, count) {
+    const b = geo.bands[stageIdx];
+    const slots = [];
+    const y = b.yBot - 9;
+    for (let k = 0; k < count; k++) {
+      const x = b.botX1 + (b.botX2 - b.botX1) * ((k + 1) / (count + 1));
+      slots.push({ x, y });
+    }
+    return slots;
+  }
+
+  async function animateFunnelBall(el, waypoints, myEpoch, getEpoch) {
+    el.classList.add('show');
+    for (const wp of waypoints) {
+      if (getEpoch() !== myEpoch) return; // 기간이 바뀌는 등으로 중단되면 더 진행하지 않음
+      el.style.left = wp.x + 'px';
+      el.style.top = wp.y + 'px';
+      await new Promise(r => setTimeout(r, 190));
+    }
+  }
+
+  let funnelEpoch = 0;
+  let funnelCycleTimer = null;
+
+  function startFunnelBallLoop(stages, geo, ballLayer) {
+    funnelEpoch++;
+    const myEpoch = funnelEpoch;
+    if (funnelCycleTimer) clearTimeout(funnelCycleTimer);
+    const spawnX = geo.width / 2, spawnY = geo.arrowsH - 6;
+
+    function runCycle() {
+      if (funnelEpoch !== myEpoch) return;
+      ballLayer.innerHTML = '';
+      const stopStages = computeBallStopStages(stages);
+      const slotCounter = {};
+      stopStages.forEach((stopStage, j) => {
+        const totalAtStage = stopStages.filter(s => s === stopStage).length;
+        const slotIdx = slotCounter[stopStage] || 0;
+        slotCounter[stopStage] = slotIdx + 1;
+        const landing = funnelLandingSlots(geo, stopStage, totalAtStage)[slotIdx];
+
+        const el = document.createElement('div');
+        el.className = 'funnel-ball';
+        el.style.left = spawnX + 'px';
+        el.style.top = spawnY + 'px';
+        ballLayer.appendChild(el);
+
+        const waypoints = [];
+        for (let i = 0; i <= stopStage; i++) {
+          waypoints.push(i === stopStage ? landing : { x: geo.width / 2, y: geo.bands[i].yBot - 2 });
+        }
+        setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * 140);
+      });
+      funnelCycleTimer = setTimeout(runCycle, 4200);
+    }
+    runCycle();
   }
 
   async function loadFunnel(periodValue) {
@@ -244,13 +339,19 @@
     try {
       const result = await getDealFunnelStats(periodValue);
       if (result.total === 0) {
+        funnelEpoch++; // 진행 중이던 공 애니메이션 중단
+        if (funnelCycleTimer) clearTimeout(funnelCycleTimer);
         svgWrap.innerHTML = '';
         listEl.innerHTML = '';
         emptyEl.classList.remove('d-none');
         return;
       }
       emptyEl.classList.add('d-none');
-      svgWrap.innerHTML = buildFunnelSvg(result.stages);
+      const geo = computeFunnelGeometry(result.stages);
+      svgWrap.innerHTML = `<div style="position:relative;width:${geo.width}px;height:${geo.height}px">` +
+        buildFunnelSvgMarkup(result.stages, geo) +
+        `<div id="funnelBallLayer" style="position:absolute;inset:0;pointer-events:none"></div></div>`;
+      startFunnelBallLoop(result.stages, geo, document.getElementById('funnelBallLayer'));
       // 번호 원을 세로선으로 이어서(참고 이미지의 단계 표처럼) 보여줍니다.
       listEl.innerHTML = `
         <div style="position:relative">

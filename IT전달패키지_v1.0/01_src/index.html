@@ -217,23 +217,27 @@
 
   // 띠(사다리꼴)들의 좌표를 미리 계산해 둡니다 — SVG를 그릴 때도, 공 애니메이션이
   // 각 단계의 정확한 위치로 떨어지게 할 때도 똑같은 좌표를 씁니다.
+  // 사용자가 올려준 참고 이미지(끊김 없이 이어지다 맨 아래가 뾰족한 원뿔 모양,
+  // 안에 글자 없이 깔끔한 색 띠)에 맞춰, 띠 사이 간격을 없애고 마지막 띠는
+  // 끝까지 좁아져 뾰족한 꼭짓점이 되도록 바꿨습니다.
   function computeFunnelGeometry(stages) {
-    const width = 220, segH = 42, gap = 4, arrowsH = 26;
+    const width = 220, segH = 44, arrowsH = 26;
     const maxW = width - 16;
     const clamp = (pct) => Math.max(pct, 10); // 0%여도 띠가 눈에 보이게 최소 폭 확보
     let y = arrowsH;
     const bands = stages.map((s, i) => {
+      const isLast = i === stages.length - 1;
       const topPct = clamp(s.pct);
-      const nextPct = i < stages.length - 1 ? clamp(stages[i + 1].pct) : topPct;
+      const nextPct = isLast ? 0 : clamp(stages[i + 1].pct); // 마지막 띠는 진짜 꼭짓점(0)까지 좁힘
       const topW = (topPct / 100) * maxW, botW = (nextPct / 100) * maxW;
       const topX1 = (width - topW) / 2, topX2 = topX1 + topW;
       const botX1 = (width - botW) / 2, botX2 = botX1 + botW;
       const yTop = y, yBot = y + segH;
-      y += segH + gap;
+      y += segH; // 간격 없이 바로 이어 붙임 (원뿔처럼 연속된 모양)
       return { topX1, topX2, botX1, botX2, yTop, yBot };
     });
-    const height = arrowsH + stages.length * segH + (stages.length - 1) * gap;
-    return { width, height, arrowsH, segH, gap, bands };
+    const height = arrowsH + stages.length * segH;
+    return { width, height, arrowsH, segH, bands };
   }
 
   function buildFunnelSvgMarkup(stages, geo) {
@@ -251,10 +255,11 @@
       parts.push(`<path d="M ${x - 8},0 L ${x},14 L ${x + 8},0" stroke="#5c6bc0" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>`);
     });
 
+    // 띠는 겹치는 순서로 그려서 이음매가 자연스럽게 보이게 하고, 사이에 얇은
+    // 흰 선을 하나씩 넣어 참고 이미지처럼 단계 구분만 살짝 보이게 합니다.
     bands.forEach((b, i) => {
       parts.push(`<polygon points="${b.topX1},${b.yTop} ${b.topX2},${b.yTop} ${b.botX2},${b.yBot} ${b.botX1},${b.yBot}" fill="url(#fg${i})"/>`);
-      parts.push(`<line x1="${b.topX1 + 5}" y1="${b.yTop + 4}" x2="${b.topX2 - 5}" y2="${b.yTop + 4}" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-linecap="round"/>`);
-      parts.push(`<text x="${width / 2}" y="${(b.yTop + b.yBot) / 2 + 4}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${stages[i].count}</text>`);
+      if (i > 0) parts.push(`<line x1="${b.topX1}" y1="${b.yTop}" x2="${b.topX2}" y2="${b.yTop}" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>`);
     });
     return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="filter:drop-shadow(0 4px 8px rgba(26,35,126,.18))">${parts.join('')}</svg>`;
   }
@@ -278,8 +283,13 @@
     const b = geo.bands[stageIdx];
     const slots = [];
     const y = b.yBot - 9;
+    // 마지막 띠는 바닥이 뾰족한 점(폭 0)이라, 공이 겹치지 않게 최소 스프레드를 둡니다
+    // (실제로도 깔때기 맨 아래에 공이 모이면 조금씩 퍼져서 쌓이는 모양과 비슷합니다).
+    const rawW = b.botX2 - b.botX1;
+    const spreadW = Math.max(rawW, 26);
+    const x0 = (b.botX1 + b.botX2) / 2 - spreadW / 2;
     for (let k = 0; k < count; k++) {
-      const x = b.botX1 + (b.botX2 - b.botX1) * ((k + 1) / (count + 1));
+      const x = x0 + spreadW * ((k + 1) / (count + 1));
       slots.push({ x, y });
     }
     return slots;

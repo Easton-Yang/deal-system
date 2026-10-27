@@ -217,27 +217,31 @@
 
   // 띠(사다리꼴)들의 좌표를 미리 계산해 둡니다 — SVG를 그릴 때도, 공 애니메이션이
   // 각 단계의 정확한 위치로 떨어지게 할 때도 똑같은 좌표를 씁니다.
-  // 사용자가 올려준 참고 이미지(끊김 없이 이어지다 맨 아래가 뾰족한 원뿔 모양,
-  // 안에 글자 없이 깔끔한 색 띠)에 맞춰, 띠 사이 간격을 없애고 마지막 띠는
-  // 끝까지 좁아져 뾰족한 꼭짓점이 되도록 바꿨습니다.
+  // 모양 자체는 데이터와 상관없이 깔끔한 역삼각형(위는 꽉 찬 폭, 아래는 뾰족한
+  // 점까지 일정하게 좁아짐)으로 고정했습니다. 실제 단계별 수치는 모양이 아니라
+  // 공 애니메이션 개수와 오른쪽 표로 보여줍니다.
   function computeFunnelGeometry(stages) {
     const width = 220, segH = 44, arrowsH = 26;
     const maxW = width - 16;
-    const clamp = (pct) => Math.max(pct, 10); // 0%여도 띠가 눈에 보이게 최소 폭 확보
-    let y = arrowsH;
-    const bands = stages.map((s, i) => {
-      const isLast = i === stages.length - 1;
-      const topPct = clamp(s.pct);
-      const nextPct = isLast ? 0 : clamp(stages[i + 1].pct); // 마지막 띠는 진짜 꼭짓점(0)까지 좁힘
-      const topW = (topPct / 100) * maxW, botW = (nextPct / 100) * maxW;
+    const n = stages.length;
+    const totalH = segH * n;
+    const bands = [];
+    for (let i = 0; i < n; i++) {
+      const yTopRel = i * segH, yBotRel = (i + 1) * segH;
+      const topW = maxW * (1 - yTopRel / totalH);
+      const botW = maxW * (1 - yBotRel / totalH); // 마지막 띠는 자연히 0(뾰족한 꼭짓점)
       const topX1 = (width - topW) / 2, topX2 = topX1 + topW;
       const botX1 = (width - botW) / 2, botX2 = botX1 + botW;
-      const yTop = y, yBot = y + segH;
-      y += segH; // 간격 없이 바로 이어 붙임 (원뿔처럼 연속된 모양)
-      return { topX1, topX2, botX1, botX2, yTop, yBot };
-    });
-    const height = arrowsH + stages.length * segH;
-    return { width, height, arrowsH, segH, bands };
+      bands.push({ topX1, topX2, botX1, botX2, yTop: arrowsH + yTopRel, yBot: arrowsH + yBotRel });
+    }
+    const height = arrowsH + totalH;
+    return { width, height, arrowsH, segH, maxW, totalH, bands };
+  }
+
+  // 역삼각형 안의 임의의 y 높이에서 폭이 얼마인지 (공을 띠 폭 안에 들어가게 배치할 때 씀)
+  function funnelWidthAtY(geo, y) {
+    const yRel = Math.min(Math.max(y - geo.arrowsH, 0), geo.totalH);
+    return geo.maxW * (1 - yRel / geo.totalH);
   }
 
   function buildFunnelSvgMarkup(stages, geo) {
@@ -265,32 +269,39 @@
   }
 
   // ── 공 흐르는 애니메이션 ──────────────────────────────────────
-  // 실제 딜 수를 그대로 공 개수로 쓰면(수백 개) 너무 많아지므로, 매번 "공 10개"를
-  // 기준으로 정규화해서 보여줍니다. 10개가 들어가서 각 단계를 통과할 때마다
-  // 실제 전환율만큼만 남고(반올림), 더 못 간 공은 그 단계에 쌓입니다 —
-  // 즉 각 단계에 쌓이는 공 개수 비율이 실제 전환율과 같습니다.
+  // 공 개수 = 이 기간에 접수된 딜 전체 개수 그대로(정규화하지 않음). 각 단계에
+  // 쌓이는 공 개수도 실제 건수 차이 그대로입니다 — 예: 접수 6건·1차검토 4건이면
+  // 2개가 접수 단계에 쌓이고 나머지 4개가 다음 단계로 넘어갑니다.
   function computeBallStopStages(stages) {
-    const survivors = stages.map(s => Math.round(10 * s.pct / 100));
-    survivors[0] = 10;
-    for (let i = 1; i < survivors.length; i++) survivors[i] = Math.min(survivors[i], survivors[i - 1]);
-    const stayed = survivors.map((v, i) => i < survivors.length - 1 ? v - survivors[i + 1] : v);
+    const n = stages.length;
+    const stayed = stages.map((s, i) => i < n - 1 ? s.count - stages[i + 1].count : s.count);
     const stopStages = [];
     stayed.forEach((cnt, stageIdx) => { for (let k = 0; k < cnt; k++) stopStages.push(stageIdx); });
     return stopStages;
   }
 
+  // 한 단계에 쌓일 공이 많으면 한 줄에 다 못 들어가므로 여러 줄로 쌓습니다
+  // (바닥 줄부터 채움). 각 줄의 폭은 그 높이에서 실제 역삼각형 폭을 씁니다.
   function funnelLandingSlots(geo, stageIdx, count) {
+    if (count <= 0) return [];
     const b = geo.bands[stageIdx];
+    const spacing = 10;
+    const midW = Math.max(((b.topX2 - b.topX1) + (b.botX2 - b.botX1)) / 2, 14);
+    const cols = Math.max(1, Math.floor(midW / spacing));
+    const rows = Math.max(1, Math.ceil(count / cols));
+    const bandH = Math.max(b.yBot - b.yTop, 1);
+    const rowSpacing = Math.min(spacing, bandH / rows);
     const slots = [];
-    const y = b.yBot - 9;
-    // 마지막 띠는 바닥이 뾰족한 점(폭 0)이라, 공이 겹치지 않게 최소 스프레드를 둡니다
-    // (실제로도 깔때기 맨 아래에 공이 모이면 조금씩 퍼져서 쌓이는 모양과 비슷합니다).
-    const rawW = b.botX2 - b.botX1;
-    const spreadW = Math.max(rawW, 26);
-    const x0 = (b.botX1 + b.botX2) / 2 - spreadW / 2;
-    for (let k = 0; k < count; k++) {
-      const x = x0 + spreadW * ((k + 1) / (count + 1));
-      slots.push({ x, y });
+    let remaining = count;
+    for (let r = 0; r < rows && remaining > 0; r++) {
+      const inRow = Math.min(cols, remaining);
+      const rowY = b.yBot - 6 - r * rowSpacing;
+      const rowW = Math.max(funnelWidthAtY(geo, rowY), 14);
+      const x0 = (geo.width - rowW) / 2;
+      for (let c = 0; c < inRow; c++) {
+        slots.push({ x: x0 + rowW * ((c + 1) / (inRow + 1)), y: rowY });
+      }
+      remaining -= inRow;
     }
     return slots;
   }
@@ -318,12 +329,24 @@
       if (funnelEpoch !== myEpoch) return;
       ballLayer.innerHTML = '';
       const stopStages = computeBallStopStages(stages);
-      const slotCounter = {};
+      const total = stopStages.length;
+      if (total === 0) { funnelCycleTimer = setTimeout(runCycle, 4200); return; }
+
+      // 공이 많을 때(딜이 많은 기간)도 한 주기가 너무 늘어지지 않게 간격을 자동으로 줄입니다.
+      const stagger = Math.max(12, Math.min(140, 1300 / total));
+
+      const countByStage = {};
+      stopStages.forEach(s => { countByStage[s] = (countByStage[s] || 0) + 1; });
+      const slotsByStage = {};
+      Object.keys(countByStage).forEach(s => { slotsByStage[s] = funnelLandingSlots(geo, Number(s), countByStage[s]); });
+      const slotCursor = {};
+
+      let maxStop = 0;
       stopStages.forEach((stopStage, j) => {
-        const totalAtStage = stopStages.filter(s => s === stopStage).length;
-        const slotIdx = slotCounter[stopStage] || 0;
-        slotCounter[stopStage] = slotIdx + 1;
-        const landing = funnelLandingSlots(geo, stopStage, totalAtStage)[slotIdx];
+        maxStop = Math.max(maxStop, stopStage);
+        const cursor = slotCursor[stopStage] || 0;
+        slotCursor[stopStage] = cursor + 1;
+        const landing = slotsByStage[stopStage][cursor];
 
         const el = document.createElement('div');
         el.className = 'funnel-ball';
@@ -335,9 +358,12 @@
         for (let i = 0; i <= stopStage; i++) {
           waypoints.push(i === stopStage ? landing : { x: geo.width / 2, y: geo.bands[i].yBot - 2 });
         }
-        setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * 140);
+        setTimeout(() => animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch), j * stagger);
       });
-      funnelCycleTimer = setTimeout(runCycle, 4200);
+
+      const spawnWindow = total * stagger;
+      const fallMs = (maxStop + 2) * 190;
+      funnelCycleTimer = setTimeout(runCycle, Math.max(3000, spawnWindow + fallMs + 1600));
     }
     runCycle();
   }

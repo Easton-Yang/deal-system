@@ -35,6 +35,11 @@
             <select id="funnelPeriod" class="form-select form-select-sm" style="width:auto"></select>
           </div>
           <div class="card-body">
+            <div class="text-muted mb-3" style="font-size:12px">
+              <i class="fas fa-circle-info me-1"></i>각 단계는 그 단계에 <strong>한 번이라도 도달한 누적 건수</strong>입니다
+              (지나간 뒤 다음 단계로 넘어갔거나 드랍된 건도 포함). 지금 그 단계에 멈춰 있는 건수는
+              <a href="deals.html?view=kanban">칸반 보드</a>나 아래 "단계별 딜 현황"에서 확인하세요.
+            </div>
             <div class="d-flex flex-wrap align-items-center" style="gap:28px">
               <div id="funnelSvgWrap" class="flex-shrink-0"></div>
               <div id="funnelList" class="flex-grow-1" style="min-width:220px"></div>
@@ -420,7 +425,6 @@
       const result = await getDealFunnelStats(periodValue);
       if (result.total === 0) {
         funnelEpoch++; // 진행 중이던 공 애니메이션 중단
-        if (funnelCycleTimer) clearTimeout(funnelCycleTimer);
         svgWrap.innerHTML = '';
         listEl.innerHTML = '';
         emptyEl.classList.remove('d-none');

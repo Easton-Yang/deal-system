@@ -97,7 +97,7 @@ async function suiteXSS(browser, base) {
   await page.goto(base + '/deals.html');
   await page.evaluate(({ a, b }) => {
     const mk = (id, name) => ({
-      id, deal_name: name, asset_class: 'PE/VC', intake_channel: '이메일',
+      id, deal_name: name, asset_class: '기업 Equity', intake_channel: '이메일',
       intake_date: '2026-09-01', assigned_to: 'tester', deal_size: 1000000000,
       current_stage: '접수', final_result: null, introducer_gp: name,
       first_opinion: name, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z'

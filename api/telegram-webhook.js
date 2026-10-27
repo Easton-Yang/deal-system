@@ -52,7 +52,7 @@ const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.
 const TEXT_TEMPLATE_GUIDE =
   '💡 비용을 아끼려면 파일 대신 아래 양식에 핵심만 채워서 텍스트로 보내주세요(아는 항목만, 나머지는 비워도 됩니다):\n\n' +
   '딜명: \n' +
-  '자산군: (PE/VC·부동산·인프라·사모크레딧·상장주식·메자닌/비상장·공모주·원화채권·해외채권·기타)\n' +
+  '자산군: (기업 Equity·부동산·인프라·기업 Debt·상장주식·메자닌/비상장·공모주·원화채권·해외채권·기타)\n' +
   '딜 규모: \n' +
   '소개자/GP: \n' +
   '투자수단: (대출·사채·보통주·우선주·CB·펀드지분·기타)\n' +
@@ -246,7 +246,7 @@ async function extractDealFields(text, fileContent) {
       type: 'object',
       properties: {
         deal_name: { type: 'string', description: '딜명(프로젝트명). 메시지에 분명한 이름이 없으면 핵심 내용을 20자 내로 요약해서 지음' },
-        asset_class: { type: 'string', enum: ['PE/VC','부동산','인프라','사모크레딧','상장주식','메자닌/비상장','공모주','원화채권','해외채권','기타'] },
+        asset_class: { type: 'string', enum: ['기업 Equity','부동산','인프라','기업 Debt','상장주식','메자닌/비상장','공모주','원화채권','해외채권','기타'] },
         deal_size: { type: 'integer', description: '투자 규모, 원 단위 정수. 예: 50억원 → 5000000000' },
         introducer_gp: { type: 'string', description: '소개자 또는 GP명' },
         investment_vehicle: { type: 'string', enum: ['대출','사채','보통주','우선주','CB','펀드지분','기타'] },

@@ -108,7 +108,7 @@ function serve(dir, port) {
       });
       localStorage.setItem('deals_v3', JSON.stringify([
         mk(1, '알파 부동산 펀드', '부동산'), mk(2, '베타 인프라', '인프라'),
-        mk(3, '감마 PE', 'PE/VC'), mk(4, '델타 부동산 II', '부동산'),
+        mk(3, '감마 PE', '기업 Equity'), mk(4, '델타 부동산 II', '부동산'),
         mk(5, '엡실론 채권', '원화채권')
       ]));
       localStorage.setItem('notes_v3', '[]');

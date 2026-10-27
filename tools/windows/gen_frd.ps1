@@ -148,7 +148,7 @@ wh2 "3.2 딜 목록 — 목록 뷰 (deals.html)"
 $t5=mkt 6 3 @(28,45,27)
 setCell $t5 1 1 "기능" $NAVY $WHITE $true $true; setCell $t5 1 2 "설명" $NAVY $WHITE $true $true; setCell $t5 1 3 "비고" $NAVY $WHITE $true $true
 @(@("텍스트 검색","딜명/GP명 실시간 검색","대소문자 구분 없음"),
-  @("자산군 필터","드롭다운: PE/VC, 부동산, 인프라, 사모크레딧, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타",""),
+  @("자산군 필터","드롭다운: 기업 Equity, 부동산, 인프라, 기업 Debt, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타",""),
   @("단계 필터","드롭다운: 접수/1차검토/심층검토/IC/투자확정/패스",""),
   @("담당자 필터","드롭다운: 팀원 목록 + 미배정","엑셀 이관 딜은 미배정"),
   @("딜 삭제","행 우측 삭제 버튼, 확인 모달 후 삭제","삭제 후 복구 불가")) | ForEach-Object -Begin {$i=2} -Process {
@@ -174,7 +174,7 @@ $t7=mkt 11 5 @(22,10,13,31,24)
 setCell $t7 1 1 "필드명" $NAVY $WHITE $true $true; setCell $t7 1 2 "필수" $NAVY $WHITE $true $true
 setCell $t7 1 3 "유형" $NAVY $WHITE $true $true; setCell $t7 1 4 "선택항목/제약" $NAVY $WHITE $true $true; setCell $t7 1 5 "비고" $NAVY $WHITE $true $true
 @(@("딜명 (프로젝트명)","필수","텍스트","최대 200자",""),
-  @("자산군","필수","드롭다운","PE/VC, 부동산, 인프라, 사모크레딧, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타",""),
+  @("자산군","필수","드롭다운","기업 Equity, 부동산, 인프라, 기업 Debt, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타",""),
   @("인입경로","필수","드롭다운","이메일/카카오톡/텔레그램/기타",""),
   @("인입일자","필수","날짜","기본값: 오늘",""),
   @("담당자","필수","드롭다운","팀원 목록","기본값: 현재 사용자"),
@@ -237,7 +237,7 @@ setCell $tD1 1 3 "제약" $NAVY $WHITE $true $true; setCell $tD1 1 4 "설명" $N
   @("deal_name","TEXT","NOT NULL","딜명"),
   @("intake_channel","TEXT","NOT NULL","인입경로: 이메일/카카오톡/텔레그램/기타"),
   @("intake_date","DATE","NOT NULL","딜 최초 인입일자"),
-  @("asset_class","TEXT","NOT NULL","자산군: PE/VC, 부동산, 인프라, 사모크레딧, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타"),
+  @("asset_class","TEXT","NOT NULL","자산군: 기업 Equity, 부동산, 인프라, 기업 Debt, 상장주식, 메자닌/비상장, 공모주, 원화채권, 해외채권, 기타"),
   @("assigned_to","TEXT","NOT NULL","담당자 이름"),
   @("deal_size","BIGINT","NULL 허용","투자 규모 (원 단위)"),
   @("introducer_gp","TEXT","NULL 허용","소개자 또는 GP명"),

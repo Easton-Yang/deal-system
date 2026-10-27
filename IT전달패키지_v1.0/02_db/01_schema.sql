@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS deals (
   deal_name       TEXT        NOT NULL,                        -- 딜명 (프로젝트명)
   intake_channel  TEXT        NOT NULL,                        -- 인입경로: 이메일/카카오톡/텔레그램/기타
   intake_date     DATE        NOT NULL,                        -- 딜 최초 인입일자
-  asset_class     TEXT        NOT NULL,                        -- 자산군(세부유형): PE/VC/부동산/인프라/사모크레딧/상장주식/메자닌·비상장/공모주/원화채권/해외채권/기타
+  asset_class     TEXT        NOT NULL,                        -- 자산군(세부유형): 기업 Equity/부동산/인프라/기업 Debt/상장주식/메자닌·비상장/공모주/원화채권/해외채권/기타
   assigned_to     TEXT        NOT NULL,                        -- 담당자 이름 ('미배정' 허용)
   deal_size       BIGINT,                                      -- 투자 규모 (원 단위, NULL 허용)
   introducer_gp   TEXT,                                        -- 소개자 또는 GP명 (NULL 허용)
@@ -44,7 +44,7 @@ ALTER TABLE deals
   ADD CONSTRAINT chk_intake_channel
     CHECK (intake_channel IN ('이메일','카카오톡','텔레그램','기타')),
   ADD CONSTRAINT chk_asset_class
-    CHECK (asset_class IN ('PE/VC','부동산','인프라','사모크레딧',
+    CHECK (asset_class IN ('기업 Equity','부동산','인프라','기업 Debt',
                            '상장주식','메자닌/비상장','공모주',
                            '원화채권','해외채권','기타')),
   ADD CONSTRAINT chk_current_stage

@@ -2,7 +2,15 @@
 $ErrorActionPreference = 'Stop'
 
 $STAGE_MAP = @('접수','1차검토','심층검토','IC','투자확정')   # 엑셀 (1)~(5)
-$ASSETS = @('PE/VC','부동산','인프라','사모크레딧','상장주식','메자닌/비상장','공모주','원화채권','해외채권','기타')
+# 엑셀 '세부유형' 칸의 글자(회사 분류, 안 바뀜) → 시스템 내부 자산군 이름.
+# 2026-10-27: 시스템 쪽 이름만 'PE/VC'→'기업 Equity', '사모크레딧'→'기업 Debt'로
+# 바꿨습니다. 엑셀에는 여전히 예전 이름으로 적혀 있을 수 있어 왼쪽(엑셀 글자)은
+# 그대로 두고 오른쪽(저장될 값)만 새 이름으로 매핑합니다.
+$ASSET_MAP = @{
+  'PE/VC'='기업 Equity'; '부동산'='부동산'; '인프라'='인프라'; '사모크레딧'='기업 Debt'
+  '상장주식'='상장주식'; '메자닌/비상장'='메자닌/비상장'; '공모주'='공모주'
+  '원화채권'='원화채권'; '해외채권'='해외채권'; '기타'='기타'
+}
 $IMPORT_BY = '엑셀이관'
 
 function JsStr($s) { if ($null -eq $s) { 'null' } else { '"' + ($s -replace '\\','\\' -replace '"','\"') + '"' } }
@@ -25,7 +33,7 @@ try {
         if ($v -is [double]) { $date = [DateTime]::FromOADate($v).ToString('yyyy-MM-dd') } else { $warn.Add("$sheet R$r 날짜 인식 불가: '$date'"); continue }
       }
       $sub = $ws.Cells.Item($r,4).Text.Trim()
-      if ($ASSETS -notcontains $sub) { $warn.Add("$sheet R$r 세부유형 '$sub' → 기타"); $sub = '기타' }
+      if ($ASSET_MAP.ContainsKey($sub)) { $sub = $ASSET_MAP[$sub] } else { $warn.Add("$sheet R$r 세부유형 '$sub' → 기타"); $sub = '기타' }
       $n = 0; for ($c = 7; $c -le 11; $c++) { if ($ws.Cells.Item($r,$c).Text.Trim()) { $n = $c - 6 } }
       if ($n -eq 0) { $n = 1 }
       $deals.Add([pscustomobject]@{

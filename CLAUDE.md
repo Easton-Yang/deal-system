@@ -371,6 +371,14 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
     기간을 바꾸면 `funnelEpoch`를 올려 이전 주기를 멈추고 새 데이터로 다시 시작합니다.
     ※ 딜이 아주 많은 기간(수백 건)을 고르면 공이 빽빽해 보일 수 있습니다 — 사용자가
     "정확히 맞춰달라"고 명시적으로 요청해 개수를 줄이지 않았습니다.
+  - **Beta-11.6: 공 하나하나를 실제 딜과 연결.** `common.js`의 `getDealFunnelStats()`가
+    집계된 `stages` 외에 딜별 목록 `deals`(각 항목: `id`, `deal_name`, `stopStage` — 그
+    딜이 도달한 가장 높은 단계)도 함께 돌려줍니다. `index.html`은 이 목록 그대로 공을
+    만들어서 공 하나하나에 그 딜의 id를 붙입니다. 공에 마우스를 올리면 딜명이 뜨고
+    (`title` 속성 — DOM 속성 지정이라 HTML 삽입이 아니고 XSS 위험 없음), **클릭하면
+    그 딜의 상세화면(`deal-detail.html?id=...`)으로 이동**합니다. 공 레이어 전체는
+    빈 공간 클릭이 화면을 막지 않도록 `pointer-events:none`이고, 공 자신만
+    `pointer-events:auto`로 되돌려 둡니다(`css/style.css`의 `.funnel-ball`).
   - **핵심은 "현재 단계"가 아니라 "단계 이력"으로 센다는 점.** `common.js`의
     `getDealFunnelStats()`가 `deal_stage_history`를 딜별로 훑어 "한 번이라도 도달한 가장
     높은 단계"를 계산합니다. 현재 단계만 보면 심층검토까지 갔다가 패스된 딜이 통계에서

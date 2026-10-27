@@ -141,6 +141,9 @@ body {
 .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
 /* ── 딜 퍼널 공 애니메이션 (대시보드) ── */
+/* 공 하나하나가 실제 딜 한 건과 연결되어 클릭하면 상세화면으로 이동합니다.
+   레이어 전체(#funnelBallLayer)는 pointer-events:none 이라 빈 공간은 클릭이
+   그대로 통과하고, 공 자신만 auto 로 되돌려 클릭·호버가 가능합니다. */
 .funnel-ball {
   position: absolute;
   width: 9px; height: 9px;
@@ -149,9 +152,16 @@ body {
   box-shadow: 0 1px 2px rgba(0,0,0,.35);
   transform: translate(-50%, -50%);
   opacity: 0;
-  transition: opacity .25s ease, left .19s linear, top .19s linear;
+  transition: opacity .25s ease, left .19s linear, top .19s linear, transform .15s ease;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .funnel-ball.show { opacity: 1; }
+.funnel-ball:hover {
+  transform: translate(-50%, -50%) scale(1.8);
+  z-index: 2;
+  box-shadow: 0 2px 5px rgba(0,0,0,.45);
+}
 
 /* ── 테이블 ── */
 .table { font-size: 13.5px; }

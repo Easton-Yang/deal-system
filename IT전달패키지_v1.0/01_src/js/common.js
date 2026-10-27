@@ -9,6 +9,14 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-11.6 2026-10-27  퍼널 공 하나하나를 실제 딜과 연결. getDealFunnelStats()가
+//                         이제 집계(stages)뿐 아니라 딜별 목록(deals: id·딜명·
+//                         도달 단계)도 함께 돌려주고, index.html은 이 목록으로
+//                         공을 만들어 각 공에 그 딜의 id를 붙임. 공에 마우스를
+//                         올리면 딜명이 뜨고(title 속성), 클릭하면 그 딜의
+//                         상세화면(deal-detail.html?id=...)으로 이동. 공 배치
+//                         방식(여러 줄로 쌓기 등)은 그대로. 화면 로직 수정이라
+//                         뒷자리 +1
 //   Beta-11.5 2026-10-27  퍼널 모양과 공 개수를 다시 손봄.
 //                         1) 모양: 단계별 수치로 폭을 좁히던 방식을 버리고,
 //                         데이터와 무관하게 깔끔한 역삼각형(위는 꽉 찬 폭,
@@ -125,7 +133,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-11.5';
+const APP_VERSION = 'Beta-11.6';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -347,7 +355,7 @@ async function getDealFunnelStats(periodValue) {
     if (dateFrom) deals = deals.filter(d => (d.intake_date || '') >= dateFrom);
     if (dateTo) deals = deals.filter(d => (d.intake_date || '') <= dateTo);
   } else {
-    let q = getSB().from('deals').select('id, intake_date, current_stage');
+    let q = getSB().from('deals').select('id, deal_name, intake_date, current_stage');
     if (dateFrom) q = q.gte('intake_date', dateFrom);
     if (dateTo) q = q.lte('intake_date', dateTo);
     const { data, error } = await q;
@@ -357,7 +365,7 @@ async function getDealFunnelStats(periodValue) {
 
   const total = deals.length;
   if (total === 0) {
-    return { total: 0, periodLabel, stages: FUNNEL_STAGES.map(name => ({ name, count: 0, pct: 0 })) };
+    return { total: 0, periodLabel, stages: FUNNEL_STAGES.map(name => ({ name, count: 0, pct: 0 })), deals: [] };
   }
 
   const ids = deals.map(d => d.id);
@@ -389,7 +397,15 @@ async function getDealFunnelStats(periodValue) {
     return { name, count, pct: Math.round((count / total) * 1000) / 10 };
   });
 
-  return { total, periodLabel, stages };
+  // 공 애니메이션에서 공 하나하나를 실제 딜로 연결하기 위한 목록(Beta-11.6).
+  // stopStage = 그 딜이 도달한 가장 높은 단계(0=접수 ... 4=투자확정).
+  const dealBalls = deals.map(d => ({
+    id: d.id,
+    deal_name: d.deal_name,
+    stopStage: Math.max(maxLevel[d.id] ?? 0, 0),
+  }));
+
+  return { total, periodLabel, stages, deals: dealBalls };
 }
 
 async function createDeal(data) {

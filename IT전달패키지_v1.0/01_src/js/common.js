@@ -9,6 +9,8 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-14.0 2026-10-27  왼쪽 하단 마이페이지 추가: 프로필(이름·부서·직함), 본인 비밀번호 변경.
+//                         현재 비밀번호 재검증 후 Auth로 변경하며 로그인 아이디는 유지.
 //   Beta-13.4 2026-10-27  팀원 4명의 표시 이름을 한글로 통일. 저장 아이디·필터 값은 유지.
 //   Beta-13.3 2026-10-27  공 낙하 가속·단계별 작은 반동·착지 시 감쇠 바운스 추가.
 //                         드랍 공은 옆으로 포물선 이동하며 회색 전환 유지.
@@ -201,7 +203,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-13.4';
+const APP_VERSION = 'Beta-14.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -1061,7 +1063,7 @@ function userFromSession(session) {
     email: email,
     // 아이디: 메일 주소의 @ 앞부분 (예: dongmin.yang@... → dongmin.yang)
     username: meta.username || email.split('@')[0] || '',
-    full_name: meta.full_name || meta.username || email.split('@')[0] || '',
+    full_name: meta.full_name || displayUserName(meta.username || email.split('@')[0]) || '',
     role: meta.role || 'user'
   };
 }
@@ -1189,10 +1191,10 @@ function updateCurrentUserInSidebar() {
   const user = getCurrentUser();
   const footer = document.querySelector('.sidebar-footer');
   if (!footer) return;
-  const label = user ? displayUserName(user.username || user.full_name || user.email) : '로그인 필요';
+  const label = user ? displayUserName(user.full_name || user.username || user.email) : '로그인 필요';
   footer.innerHTML =
-    '<i class="fas fa-user-circle me-2"></i>' +
-    '<span>' + escapeHtml(label) + '</span>' +
+    '<a href="mypage.html" class="sidebar-profile"' + (currentPageName() === 'mypage.html' ? ' aria-current="page"' : '') + '>' +
+    '<i class="fas fa-user-circle me-2"></i><span><strong>마이페이지</strong><small>' + escapeHtml(label) + '</small></span></a>' +
     '<button class="btn btn-sm btn-outline-secondary ms-auto" title="로그아웃" onclick="performLogout()">' +
     '<i class="fas fa-sign-out-alt"></i></button>';
 }

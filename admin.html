@@ -67,7 +67,7 @@
 
         <h6 class="fw-bold mb-2">비밀번호 변경</h6>
         <div class="alert alert-secondary mb-0" style="font-size:13px">
-          비밀번호는 이 화면에서 바꾸지 않습니다.
+          본인 비밀번호는 <a href="mypage.html">마이페이지</a>에서 바로 변경할 수 있습니다.
           Supabase 가 비밀번호를 <strong>해시(되돌릴 수 없는 형태)</strong>로 보관하므로,
           관리자도 다른 사람의 비밀번호를 볼 수 없습니다.
           <ul class="mb-0 mt-2">
@@ -105,7 +105,7 @@
       }
       const u = getCurrentUser();
       document.getElementById('whoami').textContent =
-        u ? displayUserName(u.username || u.full_name) + (u.email ? ' (' + u.email + ')' : '') : '';
+        u ? displayUserName(u.full_name || u.username) + (u.email ? ' (' + u.email + ')' : '') : '';
       renderLastBackup();
     })();
 

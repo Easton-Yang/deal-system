@@ -660,3 +660,9 @@ body {
   overflow: visible;
   filter: drop-shadow(0 2px 2px rgba(48,59,91,.04));
 }
+
+/* 왼쪽 하단 내 계정 바로가기 */
+.sidebar-profile { display:flex; align-items:center; flex:1; min-width:0; color:inherit; text-decoration:none; border-radius:6px; padding:5px 3px; }
+.sidebar-profile:hover, .sidebar-profile[aria-current="page"] { color:#fff; background:rgba(255,255,255,.08); }
+.sidebar-profile strong { display:block; font-size:13px; font-weight:500; }
+.sidebar-profile small { display:block; margin-top:3px; font-size:11px; opacity:.8; overflow-wrap:anywhere; }

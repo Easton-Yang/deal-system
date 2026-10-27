@@ -501,3 +501,15 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
 - 화면 확인: 맥에서는 `index.html`을 Chrome으로 열면 됩니다(CDN 사용). 로컬 서버가 필요하면 `python3 -m http.server`를 씁니다.
 - 브라우저 localStorage에 있는 데이터는 **파일이 아니어서 PC를 옮기면 따라오지 않습니다.** 맥에서는 seed-data.js의 247건으로 새로 시작합니다.
 - 회사 PC 폴더 안에 있던 중첩 폴더 `딜접수,관리시스템/딜접수,관리시스템/`은 오래된 중복 사본이라 옮기지 않았습니다.
+
+
+## 마이페이지 (2026-10-27, Beta-14.0)
+
+- 왼쪽 하단의 이름 영역이 `mypage.html` 링크입니다. 프로필과 비밀번호를 본인 계정에서만 수정합니다.
+- `js/mypage.js`: 프로필은 Auth `user_metadata.full_name`, `department`, `job_title`에 저장합니다.
+  이메일은 읽기 전용입니다. 이름 변경은 사이드바·마이페이지에 반영되고 딜 담당자 아이디는 유지합니다.
+- 비밀번호는 현재 비밀번호를 `signInWithPassword`로 재검증한 뒤 `auth.updateUser({ password })`로 변경합니다.
+  비밀번호를 파일·localStorage·로그에 따로 저장하지 않습니다. 데모 모드에서는 저장을 막습니다.
+- `currentUserName()`은 아이디 기준을 유지합니다. 프로필 이름 때문에 다음 액션 담당자 비교가 바뀌지 않게 합니다.
+- `node tools/test_mypage.js`: 테스트용 Auth 응답으로 17개 항목 확인. 실제 계정의 프로필·비밀번호는 바꾸지 않습니다.
+- 패키지 생성 도구에 새 HTML과 JS를 포함했고 XSS 검사 파일 목록에도 페이지를 추가했습니다.

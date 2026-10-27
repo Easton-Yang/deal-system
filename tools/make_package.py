@@ -30,13 +30,14 @@ SRC_OUT = os.path.join(ROOT, 'IT전달패키지_v1.0', '01_src')
 HTML_FILES = [
     'login.html', 'admin.html', 'index.html', 'deals.html',
     'deal-new.html', 'deal-detail.html', 'portfolio.html', 'weekly-report.html',
-    'deal-drafts.html',
+    'deal-drafts.html', 'mypage.html',
 ]
 
 # 그대로 복사할 파일
 COPY_AS_IS = [
     ('css/style.css', 'css/style.css'),
     ('js/common.js', 'js/common.js'),
+    ('js/mypage.js', 'js/mypage.js'),
     ('js/seed-data.js', 'js/seed-data.js'),
     ('favicon.png', 'favicon.png'),
     ('img/woongjin-preed-logo.png', 'img/woongjin-preed-logo.png'),

@@ -335,26 +335,51 @@
   async function animateFunnelBall(el, waypoints, myEpoch, getEpoch, geo) {
     el.classList.add('show');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    for (const wp of waypoints) {
-      if (getEpoch() !== myEpoch) return;
-      const x0 = parseFloat(el.style.left), y0 = parseFloat(el.style.top);
+    // 중력에 따른 가속 낙하와, 에너지가 줄어드는 두 번의 바운스를 한 시계로 그립니다.
+    const live = () => getEpoch() === myEpoch && el.isConnected;
+    async function move(duration, draw) {
       await new Promise(resolve => {
         let started;
         function frame(now) {
-          if (getEpoch() !== myEpoch) { resolve(); return; }
+          if (!live()) { resolve(); return; }
           if (started === undefined) started = now;
-          const t = reduced ? 1 : Math.min((now - started) / 190, 1);
-          const x = x0 + (wp.x - x0) * t, y = y0 + (wp.y - y0) * t;
-          el.style.left = x + 'px';
-          el.style.top = y + 'px';
-          // 드랍 예정이어도 안에서는 파랑. 공의 중심이 옆면을 넘을 때만 회색으로 바꿉니다.
-          if (wp.eject && Math.abs(x - geo.width / 2) > funnelWidthAtY(geo, y) / 2) {
-            el.classList.add('dropped');
-          }
+          const t = reduced ? 1 : Math.min((now - started) / duration, 1);
+          draw(t);
           if (t < 1) requestAnimationFrame(frame); else resolve();
         }
         requestAnimationFrame(frame);
       });
+    }
+    for (let i = 0; i < waypoints.length; i++) {
+      if (!live()) return;
+      const wp = waypoints[i], last = i === waypoints.length - 1;
+      const x0 = parseFloat(el.style.left), y0 = parseFloat(el.style.top);
+      const distance = Math.abs(wp.y - y0);
+      const duration = wp.eject ? 330 : Math.max(150, Math.min(340, Math.sqrt(2 * distance / .0028)));
+      await move(duration, t => {
+        // 가로 방향은 부드럽게 정착, 세로 방향은 낙하 가속. 드랍은 옆으로 포물선 이동.
+        const tx = wp.eject ? t : t * t * (3 - 2 * t);
+        const x = x0 + (wp.x - x0) * tx;
+        const y = y0 + (wp.y - y0) * (wp.eject ? t : t * t)
+          - (wp.eject ? 10 * 4 * t * (1 - t) : 0);
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        if (wp.eject && Math.abs(x - geo.width / 2) > funnelWidthAtY(geo, y) / 2) {
+          el.classList.add('dropped');
+        }
+      });
+      if (!live() || reduced) continue;
+      const band = geo.bands.find(b => wp.y >= b.yTop && wp.y <= b.yBot);
+      const room = band ? Math.max(0, wp.y - band.yTop - 3) : 6;
+      const amplitude = wp.eject ? 5 : Math.min(last ? 8 : 3.5, room);
+      // 중간 단계는 작게 한 번, 마지막에는 큰 튕김→작은 튕김 후 정확한 위치로 복귀.
+      const hops = last ? [amplitude, amplitude * .32] : [amplitude];
+      for (const height of hops) {
+        if (!live()) break;
+        await move(Math.max(85, Math.sqrt(8 * height / .0028)), t => {
+          el.style.top = (wp.y - height * 4 * t * (1 - t)) + 'px';
+        });
+      }
     }
   }
 
@@ -366,7 +391,7 @@
   function startFunnelBallLoop(dealBalls, geo, ballLayer, tooltipEl) {
     funnelEpoch++; // 기간을 바꿔 다시 부르면, 이전에 떨어지던 중인 공은 여기서 멈춥니다
     const myEpoch = funnelEpoch;
-    const spawnX = geo.width / 2, spawnY = geo.arrowsH - 6;
+    const spawnX = geo.width / 2, spawnY = geo.arrowsH - 36;
 
     ballLayer.innerHTML = '';
     if (tooltipEl) tooltipEl.classList.remove('show');

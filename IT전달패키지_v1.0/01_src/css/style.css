@@ -174,7 +174,7 @@ body {
   55%  { transform: translate(-50%, -50%) scale(1.7); }
   100% { transform: translate(-50%, -50%) scale(1); }
 }
-.funnel-ball.dropped.landed { animation: funnelDropPop .32s ease; }
+/* 착지 바운스는 index.html의 시간 기반 궤적으로 처리합니다. */
 
 /* 공에 올렸을 때 뜨는 말풍선 (직접 그림 — 네이티브 title 속성은 뜨는 데
    1초 안팎 걸려서 공이 다시 생기는 주기 안에 못 보일 수 있었음, Beta-11.7) */

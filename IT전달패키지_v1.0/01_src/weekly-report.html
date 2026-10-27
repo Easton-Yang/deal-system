@@ -151,7 +151,7 @@ function intakeRow(d) {
   return `<tr ${goTo(d.id)}>
     <td>${escapeHtml(d.deal_name)}</td>
     <td>${assetBadge(d.asset_class)}</td>
-    <td>${escapeHtml(d.assigned_to)}</td>
+    <td>${escapeHtml(displayUserName(d.assigned_to))}</td>
     <td>${formatDate(d.intake_date || d.created_at)}</td>
   </tr>`;
 }
@@ -163,7 +163,7 @@ function stageChangeRow(h, dealById) {
     <td>${escapeHtml(d.deal_name)}</td>
     <td>${stageBadge(h.stage)}</td>
     <td>${formatDateTime(h.changed_at)}</td>
-    <td>${escapeHtml(h.changed_by || '-')}</td>
+    <td>${escapeHtml(displayUserName(h.changed_by || '-'))}</td>
   </tr>`;
 }
 
@@ -176,14 +176,14 @@ function decisionRow(h, dealById) {
     <td>${escapeHtml(d.deal_name)}</td>
     <td>${stageBadge(h.stage)}${reasonNote}</td>
     <td>${formatDateTime(h.changed_at)}</td>
-    <td>${escapeHtml(h.changed_by || '-')}</td>
+    <td>${escapeHtml(displayUserName(h.changed_by || '-'))}</td>
   </tr>`;
 }
 
 function needsDecisionRow(d) {
   return `<tr ${goTo(d.id)}>
     <td>${escapeHtml(d.deal_name)}</td>
-    <td>${escapeHtml(d.assigned_to)}</td>
+    <td>${escapeHtml(displayUserName(d.assigned_to))}</td>
     <td>${formatDate(d.intake_date || d.created_at)}</td>
     <td>${nextActionSummaryHTML(d)}</td>
   </tr>`;
@@ -193,7 +193,7 @@ function overdueRow(d) {
   return `<tr ${goTo(d.id)}>
     <td>${escapeHtml(d.deal_name)}</td>
     <td>${escapeHtml(d.next_action)}</td>
-    <td>${escapeHtml(d.next_action_owner || '미지정')}</td>
+    <td>${escapeHtml(displayUserName(d.next_action_owner || '미지정'))}</td>
     <td>${nextActionDueHTML(d.next_action_due)}</td>
   </tr>`;
 }

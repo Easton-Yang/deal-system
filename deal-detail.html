@@ -196,7 +196,7 @@ async function renderNotes() {
     <div class="timeline-item">
       <div class="timeline-dot"></div>
       <div class="d-flex justify-content-between align-items-center">
-        <span class="timeline-author"><i class="fas fa-user-circle me-1"></i>${escapeHtml(n.author)}</span>
+        <span class="timeline-author"><i class="fas fa-user-circle me-1"></i>${escapeHtml(displayUserName(n.author))}</span>
         <span class="timeline-date">${formatDateTime(n.created_at)}</span>
       </div>
       <div class="timeline-body">
@@ -225,7 +225,7 @@ async function renderStageHistory() {
       <div class="timeline-dot" style="background:#1976d2"></div>
       <div class="d-flex justify-content-between">
         <span>${stageBadge(h.stage)}</span>
-        <span class="timeline-date">${formatDateTime(h.changed_at)}${h.changed_by ? ' · ' + escapeHtml(h.changed_by) : ''}</span>
+        <span class="timeline-date">${formatDateTime(h.changed_at)}${h.changed_by ? ' · ' + escapeHtml(displayUserName(h.changed_by)) : ''}</span>
       </div>
     </div>`).join('') + `</div>`;
 }
@@ -339,7 +339,7 @@ async function renderFiles() {
       <i class="fas ${fileIcon(f.file_name)} file-icon fa-lg"></i>
       <div class="flex-grow-1 min-width-0">
         <div class="file-name">${escapeHtml(f.file_name)}</div>
-        <div class="file-meta">${fileSize(f.file_size)}${f.uploaded_by ? ' · ' + escapeHtml(f.uploaded_by) : ''} · ${formatDateTime(f.uploaded_at)}</div>
+        <div class="file-meta">${fileSize(f.file_size)}${f.uploaded_by ? ' · ' + escapeHtml(displayUserName(f.uploaded_by)) : ''} · ${formatDateTime(f.uploaded_at)}</div>
       </div>
       ${f.file_path ? `
       <button type="button" class="btn btn-sm btn-outline-primary me-1 js-download-file"
@@ -378,7 +378,7 @@ async function saveNextAction() {
 
 function nextActionSectionHTML() {
   const ownerOptions = ['', ...TEAM_MEMBERS].map(m =>
-    `<option value="${escapeHtml(m)}" ${(deal.next_action_owner||'')===m ? 'selected':''}>${m ? escapeHtml(m) : '미지정'}</option>`
+    `<option value="${escapeHtml(m)}" ${(deal.next_action_owner||'')===m ? 'selected':''}>${m ? escapeHtml(displayUserName(m)) : '미지정'}</option>`
   ).join('');
 
   return `
@@ -524,7 +524,7 @@ function renderEditForm() {
 
   const assetOptions = ASSET_CLASSES.map(a => `<option value="${escapeHtml(a)}" ${deal.asset_class===a?'selected':''}>${escapeHtml(a)}</option>`).join('');
   const channelOptions = INTAKE_CHANNELS.map(c => `<option value="${escapeHtml(c)}" ${deal.intake_channel===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
-  const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${escapeHtml(m)}" ${deal.assigned_to===m?'selected':''}>${escapeHtml(m)}</option>`).join('');
+  const assigneeOptions = [...TEAM_MEMBERS, UNASSIGNED].map(m => `<option value="${escapeHtml(m)}" ${deal.assigned_to===m?'selected':''}>${escapeHtml(displayUserName(m))}</option>`).join('');
   const resultOptions = ['','투자','드랍','보류'].map(r => `<option value="${r}" ${(deal.final_result||'')===r?'selected':''}>${r||'미정'}</option>`).join('');
   const passReasonOptions = ['', ...PASS_REASONS].map(r => `<option value="${r}" ${(deal.pass_reason||'')===r?'selected':''}>${r||'선택 안 함'}</option>`).join('');
 
@@ -690,7 +690,7 @@ function render() {
                 <div class="info-row"><div class="info-label">자산군</div><div class="info-value">${assetBadge(deal.asset_class)}</div></div>
                 <div class="info-row"><div class="info-label">인입경로</div><div class="info-value">${escapeHtml(deal.intake_channel)}</div></div>
                 <div class="info-row"><div class="info-label">인입일자</div><div class="info-value">${formatDate(deal.intake_date)}</div></div>
-                <div class="info-row"><div class="info-label">담당자</div><div class="info-value"><strong>${escapeHtml(deal.assigned_to)}</strong></div></div>
+                <div class="info-row"><div class="info-label">담당자</div><div class="info-value"><strong>${escapeHtml(displayUserName(deal.assigned_to))}</strong></div></div>
               </div>
               <div class="col-md-6">
                 <div class="info-row"><div class="info-label">딜 규모</div><div class="info-value"><strong>${formatCurrency(deal.deal_size)}</strong></div></div>
@@ -731,7 +731,7 @@ function render() {
               <textarea id="newNoteText" class="form-control" rows="3"
                 placeholder="검토 의견, 회의 결과, 특이사항 등을 기록하세요..."></textarea>
               <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="text-muted" style="font-size:12px">작성자: <strong>${escapeHtml(currentUserName())}</strong></span>
+                <span class="text-muted" style="font-size:12px">작성자: <strong>${escapeHtml(displayUserName(currentUserName()))}</strong></span>
                 <button class="btn btn-primary btn-sm" onclick="addNote()">
                   <i class="fas fa-plus me-1"></i>메모 추가
                 </button>

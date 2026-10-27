@@ -75,7 +75,7 @@ let rejectingDraftId = null;
 // selected 값은 비교(===)에만 쓰이고 화면에 직접 찍히지 않으므로,
 // check_xss.py 가 잡아내는 4건(asset_class 등)은 실제 취약점이 아닙니다.
 function optionsHtml(list, selected) {
-  return list.map(v => `<option value="${escapeHtml(v)}" ${v === selected ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  return list.map(v => `<option value="${escapeHtml(v)}" ${v === selected ? 'selected' : ''}>${escapeHtml(displayUserName(v))}</option>`).join('');
 }
 
 // currencyUnit() 의 결과(label)는 항상 common.js의 CURRENCY_UNIT 표에 있는
@@ -223,7 +223,7 @@ async function loadProcessed() {
           ? '<span class="badge bg-success me-2">등록완료</span>'
           : '<span class="badge bg-secondary me-2">반려</span>'}
         ${escapeHtml((d.parsed && d.parsed.deal_name) || d.raw_message.slice(0, 30))}
-        <span class="text-muted">· ${escapeHtml(d.reviewed_by || '')} · ${formatDateTime(d.reviewed_at)}</span>
+        <span class="text-muted">· ${escapeHtml(displayUserName(d.reviewed_by || ''))} · ${formatDateTime(d.reviewed_at)}</span>
         ${d.created_deal_id ? `<a href="deal-detail.html?id=${d.created_deal_id}" class="ms-2">상세보기</a>` : ''}
       </div>`).join('');
   } catch (err) {

@@ -233,7 +233,7 @@ function buildFilters() {
   });
   const assignSel = document.getElementById('filterAssignee');
   [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
-    const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
+    const o = document.createElement('option'); o.value = m; o.textContent = displayUserName(m); assignSel.appendChild(o);
   });
   const statusSel = document.getElementById('filterStatus');
   REVIEW_STATUSES.forEach(s => {
@@ -297,7 +297,7 @@ function renderTable(deals) {
       <td>${assetBadge(d.asset_class)}</td>
       <td><span class="text-muted">${escapeHtml(d.intake_channel)}</span></td>
       <td style="white-space:nowrap">${escapeHtml(d.intake_date || '-')}</td>
-      <td>${escapeHtml(d.assigned_to)}</td>
+      <td>${escapeHtml(displayUserName(d.assigned_to))}</td>
       <td style="white-space:nowrap">${formatCurrency(d.deal_size)}</td>
       <td>${stageBadge(d.current_stage)}</td>
       <td>${statusBadge(dealStatus(d))}</td>
@@ -348,7 +348,7 @@ function syncBulkBar() {
 function buildBulkAssigneeOptions() {
   const sel = document.getElementById('bulkAssignee');
   sel.innerHTML = [...TEAM_MEMBERS, UNASSIGNED]
-    .map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    .map(m => `<option value="${escapeHtml(m)}">${escapeHtml(displayUserName(m))}</option>`).join('');
 }
 
 // 행 체크박스: click 은 위의 td 에서 멈추지만 change 는 따로 올라옵니다.
@@ -390,7 +390,7 @@ document.getElementById('bulkApplyBtn').addEventListener('click', async function
   const extra = hidden > 0
     ? `\n\n(이 중 ${hidden}건은 현재 화면에 보이지 않는 딜입니다)`
     : '';
-  if (!confirm(`${ids.length}건의 담당자를 '${who}'(으)로 변경하시겠습니까?${extra}`)) return;
+  if (!confirm(`${ids.length}건의 담당자를 '${displayUserName(who)}'(으)로 변경하시겠습니까?${extra}`)) return;
 
   this.disabled = true;
   const label = this.innerHTML;
@@ -444,7 +444,7 @@ function kanbanCardHTML(d) {
       <div class="kc-name">${escapeHtml(d.deal_name)}</div>
       <div class="kc-badges">${assetBadge(d.asset_class)}${dealStatus(d) !== DEFAULT_REVIEW_STATUS ? ' ' + statusBadge(dealStatus(d)) : ''}</div>
       <div class="kc-meta">
-        <span><i class="fas fa-user me-1"></i>${escapeHtml(d.assigned_to)}</span>
+        <span><i class="fas fa-user me-1"></i>${escapeHtml(displayUserName(d.assigned_to))}</span>
         ${d.deal_size ? `<span>${formatCurrency(d.deal_size)}</span>` : ''}
       </div>
       ${d.next_action ? `<div class="kc-next-action"><i class="fas fa-arrow-right me-1"></i>${escapeHtml(d.next_action)} · ${nextActionDueHTML(d.next_action_due)}</div>` : ''}

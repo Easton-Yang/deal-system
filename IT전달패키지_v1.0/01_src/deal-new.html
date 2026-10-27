@@ -189,7 +189,7 @@ function buildSelects() {
   });
   TEAM_MEMBERS.forEach(m => {
     const o = document.createElement('option');
-    o.value = o.textContent = m;
+    o.value = m; o.textContent = displayUserName(m);
     document.getElementById('assignedTo').appendChild(o);
   });
 

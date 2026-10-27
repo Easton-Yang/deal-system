@@ -9,6 +9,7 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-13.4 2026-10-27  팀원 4명의 표시 이름을 한글로 통일. 저장 아이디·필터 값은 유지.
 //   Beta-13.3 2026-10-27  공 낙하 가속·단계별 작은 반동·착지 시 감쇠 바운스 추가.
 //                         드랍 공은 옆으로 포물선 이동하며 회색 전환 유지.
 //   Beta-13.2 2026-10-27  참고 이미지의 둥근 5단 깔때기·유입 화살표 적용.
@@ -200,7 +201,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-13.3';
+const APP_VERSION = 'Beta-13.4';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -916,7 +917,7 @@ function nextActionSummaryHTML(d) {
   if (!d.next_action) return '<span class="text-muted" style="font-size:12px">-</span>';
   return `<div style="font-size:12px">
     <div>${escapeHtml(d.next_action)}</div>
-    <div class="text-muted">${nextActionDueHTML(d.next_action_due)}${d.next_action_owner ? ' · ' + escapeHtml(d.next_action_owner) : ''}</div>
+    <div class="text-muted">${nextActionDueHTML(d.next_action_due)}${d.next_action_owner ? ' · ' + escapeHtml(displayUserName(d.next_action_owner)) : ''}</div>
   </div>`;
 }
 
@@ -1073,6 +1074,17 @@ function getCurrentUser() {
   return _sessionUser;
 }
 
+// 표시 이름만 한글로 변환합니다. 저장된 담당자·로그인 아이디는 유지합니다.
+function displayUserName(value) {
+  const names = {
+    'dongmin.yang': '양동민',
+    'seungjun.shin': '신승준',
+    'minji.kim': '김민지',
+    'sunghoon.yu': '유성훈'
+  };
+  return Object.prototype.hasOwnProperty.call(names, value) ? names[value] : value;
+}
+
 // 기록(메모 작성자, 단계 변경자, 첨부 업로더)에 남길 이름
 function currentUserName() {
   const u = getCurrentUser();
@@ -1177,7 +1189,7 @@ function updateCurrentUserInSidebar() {
   const user = getCurrentUser();
   const footer = document.querySelector('.sidebar-footer');
   if (!footer) return;
-  const label = user ? (user.full_name || user.username || user.email) : '로그인 필요';
+  const label = user ? displayUserName(user.username || user.full_name || user.email) : '로그인 필요';
   footer.innerHTML =
     '<i class="fas fa-user-circle me-2"></i>' +
     '<span>' + escapeHtml(label) + '</span>' +

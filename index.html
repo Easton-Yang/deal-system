@@ -534,7 +534,7 @@
           <strong style="font-size:13px">${escapeHtml(d.deal_name)}</strong>
           <span style="font-size:12px">${nextActionDueHTML(d.next_action_due)}</span>
         </div>
-        <div class="text-muted" style="font-size:12px">${escapeHtml(d.next_action)}${d.next_action_owner ? ' · ' + escapeHtml(d.next_action_owner) : ''}</div>
+        <div class="text-muted" style="font-size:12px">${escapeHtml(d.next_action)}${d.next_action_owner ? ' · ' + escapeHtml(displayUserName(d.next_action_owner)) : ''}</div>
       </div>`).join('');
   }
 
@@ -625,7 +625,7 @@
       <tr onclick="location.href='deal-detail.html?id=${d.id}'">
         <td><strong>${escapeHtml(d.deal_name)}</strong></td>
         <td>${assetBadge(d.asset_class)}</td>
-        <td>${escapeHtml(d.assigned_to)}</td>
+        <td>${escapeHtml(displayUserName(d.assigned_to))}</td>
         <td>${formatCurrency(d.deal_size)}</td>
         <td>${stageBadge(d.current_stage)}</td>
         <td>${formatDate(d.intake_date)}</td>

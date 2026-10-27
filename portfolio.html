@@ -219,7 +219,7 @@ function renderTimelineCard(item) {
             ${assetBadge(deal.asset_class)}
             ${stageBadge(deal.current_stage)}
             ${deal.final_result ? resultBadge(deal.final_result) : ''}
-            <span class="text-muted ms-1"><i class="fas fa-user me-1"></i>${escapeHtml(deal.assigned_to)}</span>
+            <span class="text-muted ms-1"><i class="fas fa-user me-1"></i>${escapeHtml(displayUserName(deal.assigned_to))}</span>
             ${deal.deal_size ? `<span class="text-muted"><i class="fas fa-won-sign me-1"></i>${formatCurrency(deal.deal_size)}</span>` : ''}
             <span class="text-muted"><i class="fas fa-calendar me-1"></i>인입 ${intakeDate}</span>
           </div>
@@ -316,7 +316,7 @@ function toggleStageFilter(stage) {
   // 담당자 필터
   const assignSel = document.getElementById('filterAssignee');
   [...TEAM_MEMBERS, UNASSIGNED].forEach(m => {
-    const o = document.createElement('option'); o.value = o.textContent = m; assignSel.appendChild(o);
+    const o = document.createElement('option'); o.value = m; o.textContent = displayUserName(m); assignSel.appendChild(o);
   });
 
   ['filterAssignee','sortBy'].forEach(id =>

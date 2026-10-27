@@ -313,7 +313,7 @@
   let funnelCycleTimer = null;
 
   // dealBalls: common.js getDealFunnelStats()의 deals 목록 ({id, deal_name, stopStage})
-  function startFunnelBallLoop(dealBalls, geo, ballLayer) {
+  function startFunnelBallLoop(dealBalls, geo, ballLayer, tooltipEl) {
     funnelEpoch++;
     const myEpoch = funnelEpoch;
     if (funnelCycleTimer) clearTimeout(funnelCycleTimer);
@@ -322,6 +322,7 @@
     function runCycle() {
       if (funnelEpoch !== myEpoch) return;
       ballLayer.innerHTML = '';
+      if (tooltipEl) tooltipEl.classList.remove('show'); // 주기가 바뀌며 공이 사라질 때 말풍선도 같이 닫음
       const total = dealBalls.length;
       if (total === 0) { funnelCycleTimer = setTimeout(runCycle, 4200); return; }
 
@@ -345,7 +346,19 @@
         el.className = 'funnel-ball';
         el.style.left = spawnX + 'px';
         el.style.top = spawnY + 'px';
-        el.title = db.deal_name || ''; // 호버 시 딜명 (el.title 속성 지정은 HTML 삽입이 아니라 XSS 위험 없음)
+        // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
+        // 공이 다시 생기는 주기 안에 못 보일 수 있었습니다 — Beta-11.7).
+        // textContent로 넣으므로 HTML 삽입이 아니라 escapeHtml 없이도 안전합니다.
+        el.addEventListener('mouseenter', () => {
+          if (!tooltipEl) return;
+          tooltipEl.textContent = db.deal_name || '';
+          tooltipEl.style.left = el.style.left;
+          tooltipEl.style.top = el.style.top;
+          tooltipEl.classList.add('show');
+        });
+        el.addEventListener('mouseleave', () => {
+          if (tooltipEl) tooltipEl.classList.remove('show');
+        });
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
           window.location.href = `deal-detail.html?id=${db.id}`;
@@ -382,10 +395,14 @@
       }
       emptyEl.classList.add('d-none');
       const geo = computeFunnelGeometry(result.stages);
+      // 네이티브 title 속성 말풍선은 뜨기까지 1초 안팎 걸리는데, 공이 몇 초마다
+      // 통째로 다시 생기다 보니 뜰 시간이 빠듯해 안 보일 수 있었습니다(Beta-11.7).
+      // 그래서 직접 그린 말풍선(funnelTooltip)으로 바꿔 올리자마자 바로 뜨게 했습니다.
       svgWrap.innerHTML = `<div style="position:relative;width:${geo.width}px;height:${geo.height}px">` +
         buildFunnelSvgMarkup(result.stages, geo) +
-        `<div id="funnelBallLayer" style="position:absolute;inset:0;pointer-events:none"></div></div>`;
-      startFunnelBallLoop(result.deals, geo, document.getElementById('funnelBallLayer'));
+        `<div id="funnelBallLayer" style="position:absolute;inset:0;pointer-events:none"></div>` +
+        `<div id="funnelTooltip" class="funnel-tooltip"></div></div>`;
+      startFunnelBallLoop(result.deals, geo, document.getElementById('funnelBallLayer'), document.getElementById('funnelTooltip'));
       // 번호 원을 세로선으로 이어서(참고 이미지의 단계 표처럼) 보여줍니다.
       listEl.innerHTML = `
         <div style="position:relative">

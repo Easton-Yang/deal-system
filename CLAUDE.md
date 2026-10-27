@@ -374,11 +374,18 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
   - **Beta-11.6: 공 하나하나를 실제 딜과 연결.** `common.js`의 `getDealFunnelStats()`가
     집계된 `stages` 외에 딜별 목록 `deals`(각 항목: `id`, `deal_name`, `stopStage` — 그
     딜이 도달한 가장 높은 단계)도 함께 돌려줍니다. `index.html`은 이 목록 그대로 공을
-    만들어서 공 하나하나에 그 딜의 id를 붙입니다. 공에 마우스를 올리면 딜명이 뜨고
-    (`title` 속성 — DOM 속성 지정이라 HTML 삽입이 아니고 XSS 위험 없음), **클릭하면
-    그 딜의 상세화면(`deal-detail.html?id=...`)으로 이동**합니다. 공 레이어 전체는
-    빈 공간 클릭이 화면을 막지 않도록 `pointer-events:none`이고, 공 자신만
-    `pointer-events:auto`로 되돌려 둡니다(`css/style.css`의 `.funnel-ball`).
+    만들어서 공 하나하나에 그 딜의 id를 붙입니다. **클릭하면 그 딜의 상세화면
+    (`deal-detail.html?id=...`)으로 이동**합니다. 공 레이어 전체는 빈 공간 클릭이
+    화면을 막지 않도록 `pointer-events:none`이고, 공 자신만 `pointer-events:auto`로
+    되돌려 둡니다(`css/style.css`의 `.funnel-ball`).
+  - **Beta-11.7: 호버 말풍선이 안 뜨던 문제 수정.** 처음엔 공에 `el.title`(네이티브
+    브라우저 툴팁)을 썼는데, 사용자가 "마우스 올려도 안 뜬다"고 신고했습니다. 원인은
+    네이티브 title 툴팁이 뜨기까지 보통 1초 안팎 걸리는데, 공이 약 3~4초마다 통째로
+    지워지고 새로 생기다 보니(Beta-11.3의 주기 로직) 뜰 시간이 빠듯했던 것으로
+    보입니다. `el.title` 대신 직접 그린 말풍선(`#funnelTooltip` div, CSS
+    `.funnel-tooltip`)으로 바꿔서 `mouseenter`에 바로 보이고 `mouseleave`/주기
+    리셋 시 바로 숨도록 했습니다. 말풍선 텍스트는 `textContent`로 넣어서(HTML
+    삽입이 아니므로) escapeHtml 없이도 XSS 위험이 없습니다.
   - **핵심은 "현재 단계"가 아니라 "단계 이력"으로 센다는 점.** `common.js`의
     `getDealFunnelStats()`가 `deal_stage_history`를 딜별로 훑어 "한 번이라도 도달한 가장
     높은 단계"를 계산합니다. 현재 단계만 보면 심층검토까지 갔다가 패스된 딜이 통계에서

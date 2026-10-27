@@ -198,9 +198,7 @@
 
   // 딜 소싱 → 투자 전환 퍼널
   // 색은 하늘색(위, 딜 소싱)에서 보라색(아래, 투자확정)으로 점점 짙어지는
-  // 그라데이션을 씁니다. 리본처럼 보이도록 각 띠에 세로 그라데이션 +
-  // 윗면 하이라이트 선 + 그림자를 넣었습니다(참고 이미지는 디자인 느낌만
-  // 참고했고 그대로 그리지 않았습니다 — 저작권이 있는 스톡 이미지입니다).
+  // 색 띠와 둥근 윗면을 사용자 제공 참고 이미지에 맞춰 직접 SVG로 그립니다.
   function hexToRgb(hex) {
     const n = parseInt(hex.slice(1), 16);
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -218,28 +216,27 @@
     const mix = (c) => Math.max(0, Math.min(255, Math.round(c + (255 - c) * amt)));
     return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
   }
-  const funnelColors = FUNNEL_STAGES.map((_, i) => lerpColor('#8ecae6', '#5e3a8c', i / (FUNNEL_STAGES.length - 1)));
+  const funnelColors = ['#548ae0', '#85b7db', '#82c5f6', '#9674c7', '#b49bd5'];
 
   // 띠(사다리꼴)들의 좌표를 미리 계산해 둡니다 — SVG를 그릴 때도, 공 애니메이션이
   // 각 단계의 정확한 위치로 떨어지게 할 때도 똑같은 좌표를 씁니다.
-  // 모양 자체는 데이터와 상관없이 깔끔한 역삼각형(위는 꽉 찬 폭, 아래는 뾰족한
-  // 점까지 일정하게 좁아짐)으로 고정했습니다. 실제 단계별 수치는 모양이 아니라
+  // 모양은 데이터와 무관하게 위에서 아래로 좁아지며 단계 사이에 간격을 둡니다. 실제 단계별 수치는 모양이 아니라
   // 공 애니메이션 개수와 오른쪽 표로 보여줍니다.
   function computeFunnelGeometry(stages) {
-    const width = 220, segH = 44, arrowsH = 26;
+    const width = 220, segH = 46, arrowsH = 58;
     const maxW = width - 16;
     const n = stages.length;
     const totalH = segH * n;
     const bands = [];
     for (let i = 0; i < n; i++) {
-      const yTopRel = i * segH, yBotRel = (i + 1) * segH;
+      const yTopRel = i * segH, yBotRel = (i + 1) * segH - (i < n - 1 ? 8 : 0);
       const topW = maxW * (1 - yTopRel / totalH);
       const botW = maxW * (1 - yBotRel / totalH); // 마지막 띠는 자연히 0(뾰족한 꼭짓점)
       const topX1 = (width - topW) / 2, topX2 = topX1 + topW;
       const botX1 = (width - botW) / 2, botX2 = botX1 + botW;
       bands.push({ topX1, topX2, botX1, botX2, yTop: arrowsH + yTopRel, yBot: arrowsH + yBotRel });
     }
-    const height = arrowsH + totalH;
+    const height = arrowsH + totalH + 12;
     return { width, height, arrowsH, segH, maxW, totalH, bands };
   }
 
@@ -249,37 +246,39 @@
     return geo.maxW * (1 - yRel / geo.totalH);
   }
 
-  // 도트는 가공된 표면 질감이며, 실제 딜 개수는 위에 놓이는 구슬로 표시합니다.
-  // 애니메이션과 같은 geo를 사용해 표면과 공의 위치가 어긋나지 않게 합니다.
+  // 첨부 참고 이미지처럼 둥근 윗면과 좁아지는 옆면을 가진 5단 깔때기.
+  // 단계 간 간격도 geo에 반영해 공이 빈 틈에 멈추지 않게 합니다.
   function buildFunnelSvgMarkup(stages, geo) {
     const { width, height, bands } = geo;
-    const parts = ['<defs>'];
+    const cx = width / 2;
+    const parts = ['<defs><marker id="funnelArrow" markerWidth="6" markerHeight="7" refX="4.7" refY="3.5" orient="auto"><path d="M0 0L5 3.5L0 7L1.5 3.5Z" fill="#4d86df"/></marker>'];
     funnelColors.forEach((c, i) => {
-      parts.push(`<linearGradient id="fg${i}" x1="0" y1="0" x2="0.3" y2="1">
-        <stop offset="0" stop-color="${c}" stop-opacity=".28"/>
-        <stop offset="1" stop-color="${c}" stop-opacity=".12"/>
-      </linearGradient><pattern id="funnelDots${i}" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
-        <circle cx="1.75" cy="1.75" r=".43" fill="${c}" fill-opacity=".78"/>
-      </pattern>`);
+      parts.push(`<linearGradient id="fg${i}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${lightenRgb(lerpColor(c, c, 0), .14)}"/>
+        <stop offset="1" stop-color="${c}"/>
+      </linearGradient>`);
     });
     parts.push('</defs>');
+    parts.push(`<ellipse cx="${cx}" cy="${height - 5}" rx="54" ry="5" fill="#23304b" opacity=".07"/>
+      <g fill="none" stroke="#4d86df" stroke-width="3.4" stroke-linecap="round" marker-end="url(#funnelArrow)">
+        <path d="M49 24Q70 5 85 43"/>
+        <path d="M92 3Q106 15 110 38"/>
+        <path d="M135 10Q123 26 123 44"/>
+        <path d="M177 18Q149 -1 142 37"/>
+      </g>`);
     bands.forEach((b, i) => {
-      const c = funnelColors[i];
-      const points = `${b.topX1},${b.yTop} ${b.topX2},${b.yTop} ${b.botX2},${b.yBot} ${b.botX1},${b.yBot}`;
-      // 아래쪽 두께 → 표면 → 도트 → 테두리·고정 핀 순서로 그립니다.
-      parts.push(`<polygon points="${points}" transform="translate(0 2.4)" fill="${c}" opacity=".25"/>
-        <polygon points="${points}" fill="url(#fg${i})"/>
-        <polygon points="${points}" fill="url(#funnelDots${i})"/>
-        <path d="M${b.topX1},${b.yTop}L${b.botX1},${b.yBot} M${b.topX2},${b.yTop}L${b.botX2},${b.yBot}"
-          fill="none" stroke="${c}" stroke-width="1.35"/>
-        <path d="M${b.topX1},${b.yTop}H${b.topX2}" stroke="${lightenRgb(c, .26)}" stroke-width="1.1"/>`);
-      [b.topX1 + 2.6, b.topX2 - 2.6].forEach(x => {
-        parts.push(`<circle cx="${x}" cy="${b.yTop + 1.8}" r=".95" fill="${c}"/>
-          <circle cx="${x - .18}" cy="${b.yTop + 1.6}" r=".28" fill="#fff"/>`);
-      });
+      const ry = Math.max(1.5, (b.topX2 - b.topX1) * .035);
+      const bottomRy = Math.max(0, (b.botX2 - b.botX1) * .025);
+      parts.push(`<path d="M${b.topX1} ${b.yTop}L${b.botX1} ${b.yBot}
+        Q${cx} ${b.yBot + bottomRy * 2} ${b.botX2} ${b.yBot}L${b.topX2} ${b.yTop}Z"
+        fill="url(#fg${i})"/>
+        <ellipse cx="${cx}" cy="${b.yTop}" rx="${(b.topX2 - b.topX1) / 2}" ry="${ry}"
+          fill="${funnelColors[i]}"/>
+        <path d="M${b.topX1 + 2} ${b.yTop - .4}Q${cx} ${b.yTop - ry * 1.75} ${b.topX2 - 2} ${b.yTop - .4}"
+          fill="none" stroke="#fff" stroke-opacity=".24" stroke-width=".7"/>`);
     });
-    return `<svg class="funnel-dot-surface" aria-hidden="true" viewBox="0 0 ${width} ${height + 4}"
-      width="${width}" height="${height + 4}">${parts.join('')}</svg>`;
+    return `<svg class="funnel-surface" aria-hidden="true" viewBox="0 0 ${width} ${height}"
+      width="${width}" height="${height}">${parts.join('')}</svg>`;
   }
 
   // ── 공 흐르는 애니메이션 ──────────────────────────────────────
@@ -324,7 +323,7 @@
   // 더 멀리 자리를 잡아 서로 겹치지 않게 합니다.
   function funnelEjectSlot(geo, stageIdx, index) {
     const b = geo.bands[stageIdx];
-    const y = b.yTop + geo.segH * 0.55 + (index % 3) * 9;
+    const y = Math.min(b.yTop + geo.segH * 0.55 + (index % 3) * 5, b.yBot - 6);
     const side = index % 2 === 0 ? -1 : 1;
     const ringW = funnelWidthAtY(geo, y);
     const margin = 10 + Math.floor(index / 2) * 12;
@@ -333,13 +332,29 @@
     return { x, y };
   }
 
-  async function animateFunnelBall(el, waypoints, myEpoch, getEpoch) {
+  async function animateFunnelBall(el, waypoints, myEpoch, getEpoch, geo) {
     el.classList.add('show');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const wp of waypoints) {
-      if (getEpoch() !== myEpoch) return; // 기간이 바뀌는 등으로 중단되면 더 진행하지 않음
-      el.style.left = wp.x + 'px';
-      el.style.top = wp.y + 'px';
-      await new Promise(r => setTimeout(r, 190));
+      if (getEpoch() !== myEpoch) return;
+      const x0 = parseFloat(el.style.left), y0 = parseFloat(el.style.top);
+      await new Promise(resolve => {
+        let started;
+        function frame(now) {
+          if (getEpoch() !== myEpoch) { resolve(); return; }
+          if (started === undefined) started = now;
+          const t = reduced ? 1 : Math.min((now - started) / 190, 1);
+          const x = x0 + (wp.x - x0) * t, y = y0 + (wp.y - y0) * t;
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
+          // 드랍 예정이어도 안에서는 파랑. 공의 중심이 옆면을 넘을 때만 회색으로 바꿉니다.
+          if (wp.eject && Math.abs(x - geo.width / 2) > funnelWidthAtY(geo, y) / 2) {
+            el.classList.add('dropped');
+          }
+          if (t < 1) requestAnimationFrame(frame); else resolve();
+        }
+        requestAnimationFrame(frame);
+      });
     }
   }
 
@@ -387,7 +402,7 @@
       const landing = db.dropped ? dropSlotOf(db.stopStage) : stayedSlotOf(db.stopStage);
 
       const el = document.createElement('div');
-      el.className = 'funnel-ball' + (db.dropped ? ' dropped' : '');
+      el.className = 'funnel-ball';
       el.style.left = spawnX + 'px';
       el.style.top = spawnY + 'px';
       // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
@@ -416,10 +431,10 @@
         waypoints.push({ x: geo.width / 2, y: geo.bands[i].yBot - 2 });
       }
       if (db.dropped) waypoints.push({ x: geo.width / 2, y: geo.bands[db.stopStage].yTop + geo.segH * 0.3 });
-      waypoints.push(landing);
+      waypoints.push({ ...landing, eject: !!db.dropped });
 
       setTimeout(() => {
-        animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch).then(() => {
+        animateFunnelBall(el, waypoints, myEpoch, () => funnelEpoch, geo).then(() => {
           if (db.dropped && funnelEpoch === myEpoch) el.classList.add('landed');
         });
       }, j * stagger);

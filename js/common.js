@@ -9,6 +9,21 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-13.0 2026-10-27  관리 화면(admin.html)에 "데이터 백업" 버튼 추가.
+//                         Supabase 무료 요금제는 자동 백업을 지원하지 않아서
+//                         (Database > Backups에서 직접 확인: "Free Plan does
+//                         not include project backups"), deals·
+//                         deal_stage_history·deal_notes·deal_files·
+//                         deal_drafts 다섯 테이블을 JSON 파일 하나로 묶어
+//                         내려받는 수동 백업 버튼을 만듦(`downloadBackup()`).
+//                         로그인 사용자 권한(authenticated)의 SELECT만으로
+//                         되므로 service_role 키 불필요. 현재 전체 데이터가
+//                         1MB 미만이라(Supabase에서 실측) 첨부파일 실물은
+//                         포함하지 않음(첨부 0건이라 지금은 필요 없었음).
+//                         사용자가 매주 직접 눌러 로컬에 보관하는 루틴으로
+//                         쓰기로 함. 마지막 백업 날짜는 그 브라우저의
+//                         localStorage에만 남음(기기 간 동기화 안 됨, 참고용).
+//                         화면 기능 추가라 앞자리 올림
 //   Beta-12.1 2026-10-27  "대시보드랑 칸반보드랑 숫자가 다르다" 신고 확인·수정.
 //                         1) 버그: Beta-11.8에서 반복 재생 루프를 없애며
 //                         `funnelCycleTimer` 변수를 지웠는데, `loadFunnel()`의
@@ -179,7 +194,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-12.1';
+const APP_VERSION = 'Beta-13.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];

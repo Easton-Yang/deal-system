@@ -26,59 +26,55 @@
 
   <div class="content-area">
 
-    <!-- 통계 카드 -->
+    <!-- 딜 소싱 → 투자 전환 퍼널 + 통계 카드 -->
     <div class="row g-3 mb-4">
-      <div class="col-md-3 col-6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background:#1a237e"><i class="fas fa-briefcase"></i></div>
-          <div>
-            <div class="stat-value" id="statTotal">-</div>
-            <div class="stat-label">전체 딜</div>
+      <div class="col-lg-8">
+        <div class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-filter me-2"></i>딜 소싱 → 투자 전환 퍼널</span>
+            <select id="funnelPeriod" class="form-select form-select-sm" style="width:auto"></select>
+          </div>
+          <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center" style="gap:28px">
+              <div id="funnelSvgWrap" class="flex-shrink-0"></div>
+              <div id="funnelList" class="flex-grow-1" style="min-width:220px"></div>
+            </div>
+            <div id="funnelEmpty" class="text-center text-muted py-4 d-none">
+              <i class="fas fa-inbox d-block mb-2"></i>이 기간에 접수된 딜이 없습니다.
+            </div>
           </div>
         </div>
       </div>
-      <div class="col-md-3 col-6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background:#1976d2"><i class="fas fa-search"></i></div>
-          <div>
-            <div class="stat-value" id="statReview">-</div>
-            <div class="stat-label">검토 중</div>
+      <div class="col-lg-4">
+        <div class="d-flex flex-column gap-3 h-100">
+          <div class="stat-card flex-fill">
+            <div class="stat-icon" style="background:#1a237e"><i class="fas fa-briefcase"></i></div>
+            <div>
+              <div class="stat-value" id="statTotal">-</div>
+              <div class="stat-label">전체 딜</div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-3 col-6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background:#2e7d32"><i class="fas fa-check-circle"></i></div>
-          <div>
-            <div class="stat-value" id="statConfirmed">-</div>
-            <div class="stat-label">투자확정</div>
+          <div class="stat-card flex-fill">
+            <div class="stat-icon" style="background:#1976d2"><i class="fas fa-search"></i></div>
+            <div>
+              <div class="stat-value" id="statReview">-</div>
+              <div class="stat-label">검토 중</div>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-3 col-6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background:#f57c00"><i class="fas fa-calendar-plus"></i></div>
-          <div>
-            <div class="stat-value" id="statThisMonth">-</div>
-            <div class="stat-label">이번 달 신규</div>
+          <div class="stat-card flex-fill">
+            <div class="stat-icon" style="background:#2e7d32"><i class="fas fa-check-circle"></i></div>
+            <div>
+              <div class="stat-value" id="statConfirmed">-</div>
+              <div class="stat-label">투자확정</div>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 딜 소싱 → 투자 전환 퍼널 -->
-    <div class="card mb-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fas fa-filter me-2"></i>딜 소싱 → 투자 전환 퍼널</span>
-        <select id="funnelPeriod" class="form-select form-select-sm" style="width:auto"></select>
-      </div>
-      <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center" style="gap:28px">
-          <div id="funnelSvgWrap" class="flex-shrink-0"></div>
-          <div id="funnelList" class="flex-grow-1" style="min-width:260px"></div>
-        </div>
-        <div id="funnelEmpty" class="text-center text-muted py-4 d-none">
-          <i class="fas fa-inbox d-block mb-2"></i>이 기간에 접수된 딜이 없습니다.
+          <div class="stat-card flex-fill">
+            <div class="stat-icon" style="background:#f57c00"><i class="fas fa-calendar-plus"></i></div>
+            <div>
+              <div class="stat-value" id="statThisMonth">-</div>
+              <div class="stat-label">이번 달 신규</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -66,6 +66,23 @@
       </div>
     </div>
 
+    <!-- 딜 소싱 → 투자 전환 퍼널 -->
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-filter me-2"></i>딜 소싱 → 투자 전환 퍼널</span>
+        <select id="funnelPeriod" class="form-select form-select-sm" style="width:auto"></select>
+      </div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center" style="gap:28px">
+          <div id="funnelSvgWrap" class="flex-shrink-0"></div>
+          <div id="funnelList" class="flex-grow-1" style="min-width:260px"></div>
+        </div>
+        <div id="funnelEmpty" class="text-center text-muted py-4 d-none">
+          <i class="fas fa-inbox d-block mb-2"></i>이 기간에 접수된 딜이 없습니다.
+        </div>
+      </div>
+    </div>
+
     <!-- 다음 액션 현황 -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
@@ -177,6 +194,98 @@
   document.getElementById('statReview').textContent = reviewing.length;
   document.getElementById('statConfirmed').textContent = confirmed.length;
   document.getElementById('statThisMonth').textContent = thisMonth.length;
+
+  // 딜 소싱 → 투자 전환 퍼널
+  // 사용자가 올려준 참고 이미지 스타일(위에서 아래로 화살표가 모여들고, 하늘색에서
+  // 보라색으로 짙어지는 깔때기 + 번호 원이 세로선으로 이어진 표)을 따라 그립니다.
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function lerpColor(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    const r = Math.round(ca.r + (cb.r - ca.r) * t);
+    const g = Math.round(ca.g + (cb.g - ca.g) * t);
+    const bl = Math.round(ca.b + (cb.b - ca.b) * t);
+    return `rgb(${r},${g},${bl})`;
+  }
+  // 하늘색(위, 딜 소싱) → 보라색(아래, 투자확정)으로 점점 짙어지는 그라데이션
+  const funnelColors = FUNNEL_STAGES.map((_, i) => lerpColor('#8ecae6', '#5e3a8c', i / (FUNNEL_STAGES.length - 1)));
+
+  function buildFunnelSvg(stages) {
+    const width = 220, segH = 42, gap = 4, arrowsH = 26;
+    const funnelH = stages.length * segH + (stages.length - 1) * gap;
+    const height = arrowsH + funnelH;
+    const maxW = width - 16;
+    const clamp = (pct) => Math.max(pct, 10); // 0%여도 띠가 눈에 보이게 최소 폭 확보
+    const parts = [];
+
+    // 위에서 모여드는 화살표 3개 (딜이 들어오는 느낌)
+    [0.28, 0.5, 0.72].forEach(f => {
+      const x = width * f;
+      parts.push(`<path d="M ${x - 8},0 L ${x},14 L ${x + 8},0" stroke="#5c6bc0" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>`);
+    });
+
+    let y = arrowsH;
+    stages.forEach((s, i) => {
+      const topPct = clamp(s.pct);
+      const nextPct = i < stages.length - 1 ? clamp(stages[i + 1].pct) : topPct;
+      const topW = (topPct / 100) * maxW, botW = (nextPct / 100) * maxW;
+      const topX1 = (width - topW) / 2, topX2 = topX1 + topW;
+      const botX1 = (width - botW) / 2, botX2 = botX1 + botW;
+      const yTop = y, yBot = y + segH;
+      parts.push(`<polygon points="${topX1},${yTop} ${topX2},${yTop} ${botX2},${yBot} ${botX1},${yBot}" fill="${funnelColors[i]}"/>`);
+      parts.push(`<text x="${width / 2}" y="${yTop + segH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${s.count}</text>`);
+      y += segH + gap;
+    });
+    return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${parts.join('')}</svg>`;
+  }
+
+  async function loadFunnel(periodValue) {
+    const svgWrap = document.getElementById('funnelSvgWrap');
+    const listEl = document.getElementById('funnelList');
+    const emptyEl = document.getElementById('funnelEmpty');
+    try {
+      const result = await getDealFunnelStats(periodValue);
+      if (result.total === 0) {
+        svgWrap.innerHTML = '';
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('d-none');
+        return;
+      }
+      emptyEl.classList.add('d-none');
+      svgWrap.innerHTML = buildFunnelSvg(result.stages);
+      // 번호 원을 세로선으로 이어서(참고 이미지의 단계 표처럼) 보여줍니다.
+      listEl.innerHTML = `
+        <div style="position:relative">
+          <div style="position:absolute;left:11px;top:12px;bottom:12px;width:2px;background:var(--border)"></div>
+          ${result.stages.map((s, i) => `
+          <div class="d-flex align-items-center mb-2" style="gap:10px;position:relative">
+            <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                 style="width:24px;height:24px;background:${funnelColors[i]};color:#fff;font-size:11px;font-weight:700">${i + 1}</div>
+            <div class="fw-semibold" style="width:84px;font-size:13px">${escapeHtml(s.name)}</div>
+            <div class="flex-grow-1">
+              <div class="progress" style="height:8px;background:#eef1f6">
+                <div class="progress-bar" style="width:${s.pct}%;background:${funnelColors[i]}"></div>
+              </div>
+            </div>
+            <div style="width:100px;text-align:right" class="small">
+              <strong>${s.count}건</strong> <span class="text-muted">(${s.pct}%)</span>
+            </div>
+          </div>`).join('')}
+        </div>`;
+    } catch (err) {
+      listEl.innerHTML = `<div class="alert alert-danger">퍼널 불러오기 실패: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  const funnelSel = document.getElementById('funnelPeriod');
+  const funnelQuarters = listFunnelQuarters();
+  funnelSel.innerHTML = funnelQuarters.map(q => `<option value="${q.value}">${escapeHtml(q.label)}</option>`).join('')
+    + '<option value="all">전체 기간</option>';
+  funnelSel.value = funnelQuarters.length ? funnelQuarters[0].value : 'all';
+  funnelSel.onchange = () => loadFunnel(funnelSel.value);
+  loadFunnel(funnelSel.value);
 
   // 다음 액션 현황
   function renderActionList(containerId, list, emptyMsg) {

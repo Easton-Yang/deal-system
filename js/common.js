@@ -9,6 +9,13 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-11.1 2026-10-27  대시보드에 "딜 소싱 → 투자 전환 퍼널" 그래픽 추가. 접수부터
+//                         투자확정까지 각 단계에 한 번이라도 도달한 딜 수를 단계
+//                         이력(deal_stage_history) 기준으로 세어 깔때기 모양으로
+//                         보여줌(현재 단계만 보면 중간에 패스된 딜의 과거 진행도가
+//                         빠짐). 분기별/전체 기간 선택 가능. common.js에
+//                         getDealFunnelStats() 등 추가, index.html에 그래픽 렌더링.
+//                         화면 로직 추가라 뒷자리 +1
 //   Beta-11.0 2026-10-27  텔레그램 접수 화면에 "비슷한 딜이 있어요" 중복 경고 추가.
 //                         딜명을 기존 딜 전체(화면에서 숨긴 과거분 포함) + 다른
 //                         대기중인 초안과 글자 2개씩 겹치는 정도(Dice 유사도)로
@@ -88,7 +95,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-11.0';
+const APP_VERSION = 'Beta-11.1';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '패스'];
@@ -250,6 +257,109 @@ async function getDeal(id) {
   const { data, error } = await getSB().from('deals').select('*').eq('id', id).single();
   if (error) throw error;
   return data;
+}
+
+// ── 딜 퍼널 통계 (Beta-11.1) ───────────────────────────────────────
+// 대시보드의 "딜 소싱 → 투자 전환" 퍼널 그래픽에 씁니다. 접수부터
+// 투자확정까지 각 단계에 '한 번이라도 도달한 적 있는' 딜 수를 셉니다.
+// 현재 단계만 보면 안 되는 이유: 심층검토까지 갔다가 패스된 딜도
+// 심층검토 단계까지는 도달했던 걸로 쳐야 퍼널(깔때기)이 맞기 때문입니다.
+// 그래서 현재 단계가 아니라 단계 이력(deal_stage_history)을 기준으로
+// "도달한 가장 높은 단계"를 계산합니다. '패스'는 도달 단계가 아니라
+// 중간에 빠져나가는 결과라 퍼널 단계에서 뺍니다.
+const FUNNEL_STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정'];
+
+function quarterOfDate(dateStr) {
+  const d = new Date(dateStr);
+  return { year: d.getFullYear(), q: Math.floor(d.getMonth() / 3) + 1 };
+}
+
+function quarterDateRange(year, q) {
+  const startMonth = (q - 1) * 3;
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, startMonth + 3, 0);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { start: iso(start), end: iso(end) };
+}
+
+// 화면에 표시할 딜이 시작되는 시점(config.js의 DISPLAY_FROM_DATE, 없으면
+// 2026-01-01)부터 이번 분기까지 분기 목록을 최신순으로 돌려줍니다.
+// 대시보드의 기간 선택 드롭다운에 씁니다.
+function listFunnelQuarters() {
+  const startStr = DISPLAY_FROM_DATE || '2026-01-01';
+  const startQ = quarterOfDate(startStr);
+  const nowQ = quarterOfDate(new Date().toISOString());
+  const list = [];
+  let y = startQ.year, q = startQ.q;
+  while (y < nowQ.year || (y === nowQ.year && q <= nowQ.q)) {
+    list.push({ value: `${y}-Q${q}`, label: `${y}년 ${q}분기` });
+    q++; if (q > 4) { q = 1; y++; }
+  }
+  return list.reverse();
+}
+
+// periodValue: 'all' 이거나 생략 시 전체 기간(DISPLAY_FROM_DATE 이후), '2026-Q4' 형식이면 해당 분기만.
+async function getDealFunnelStats(periodValue) {
+  let dateFrom = DISPLAY_FROM_DATE || null;
+  let dateTo = null;
+  let periodLabel = '전체 기간';
+  if (periodValue && periodValue !== 'all') {
+    const [yearStr, qStr] = periodValue.split('-Q');
+    const { start, end } = quarterDateRange(Number(yearStr), Number(qStr));
+    dateFrom = dateFrom && dateFrom > start ? dateFrom : start;
+    dateTo = end;
+    periodLabel = `${yearStr}년 ${qStr}분기`;
+  }
+
+  let deals;
+  if (DEMO_MODE) {
+    deals = demoGet('deals_v3');
+    if (dateFrom) deals = deals.filter(d => (d.intake_date || '') >= dateFrom);
+    if (dateTo) deals = deals.filter(d => (d.intake_date || '') <= dateTo);
+  } else {
+    let q = getSB().from('deals').select('id, intake_date, current_stage');
+    if (dateFrom) q = q.gte('intake_date', dateFrom);
+    if (dateTo) q = q.lte('intake_date', dateTo);
+    const { data, error } = await q;
+    if (error) throw error;
+    deals = data;
+  }
+
+  const total = deals.length;
+  if (total === 0) {
+    return { total: 0, periodLabel, stages: FUNNEL_STAGES.map(name => ({ name, count: 0, pct: 0 })) };
+  }
+
+  const ids = deals.map(d => d.id);
+  let historyRows;
+  if (DEMO_MODE) {
+    const idSet = new Set(ids);
+    historyRows = demoGet('stage_history_v3').filter(h => idSet.has(h.deal_id));
+  } else {
+    historyRows = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const { data, error } = await getSB().from('deal_stage_history').select('deal_id, stage').in('deal_id', chunk);
+      if (error) throw error;
+      historyRows.push(...data);
+    }
+  }
+
+  // 딜별로 도달한 가장 높은 단계. 이력에 없어도(기록이 조용히 실패했을 경우
+  // 대비) 현재 단계는 최소한 반영되도록 둘 다 봅니다.
+  const maxLevel = {};
+  deals.forEach(d => { maxLevel[d.id] = FUNNEL_STAGES.indexOf(d.current_stage); });
+  historyRows.forEach(h => {
+    const idx = FUNNEL_STAGES.indexOf(h.stage);
+    if (idx > (maxLevel[h.deal_id] ?? -1)) maxLevel[h.deal_id] = idx;
+  });
+
+  const stages = FUNNEL_STAGES.map((name, i) => {
+    const count = ids.filter(id => (maxLevel[id] ?? -1) >= i).length;
+    return { name, count, pct: Math.round((count / total) * 1000) / 10 };
+  });
+
+  return { total, periodLabel, stages };
 }
 
 async function createDeal(data) {

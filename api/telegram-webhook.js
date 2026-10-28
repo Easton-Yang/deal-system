@@ -40,6 +40,12 @@
 // 안내합니다. 엑셀(.xlsx)·한글(.hwp)도 아직 미지원입니다.
 // 비용을 더 줄이려면(가장 저렴한 길은 텍스트 직접 입력) /start 안내에
 // 담당자가 핵심만 채워 보낼 수 있는 입력 양식을 함께 보여줍니다.
+//
+// 원본 파일 자체(PDF·PPT·워드·사진)는 AI 분석과 별개로 기존 'deal-files'
+// Storage 버킷에도 올려 둡니다(uploadDraftFile). 담당자가 '텔레그램 접수'
+// 화면에서 원본을 내려받아 확인할 수 있고, "딜로 등록"하면 그 딜의
+// 첨부파일로 자동 연결됩니다(js/common.js의 confirmDraft). "반려"하면
+// 저장공간을 계속 차지하지 않도록 파일도 함께 지웁니다(rejectDraft).
 
 const zlib = require('zlib');
 
@@ -143,6 +149,7 @@ async function handler(req, res) {
 
   let fileContent = null;       // Claude에 이미지/문서로 그대로 올릴 내용 (PDF·사진)
   let extractedFileText = null; // 파일에서 글자만 뽑아낸 내용 (PPT·워드) — 텍스트로 분석해 더 저렴함
+  let draftFile = null;         // Storage에 올린 원본 파일 정보 { file_path, file_name, file_size }
 
   if (fileRef) {
     const name = (fileRef.file_name || '').toLowerCase();
@@ -177,6 +184,15 @@ async function handler(req, res) {
       } else {
         fileContent = { kind: isPdf ? 'document' : 'image', mediaType: isPdf ? 'application/pdf' : fileRef.mime_type, base64: buf.toString('base64') };
       }
+      // 원본 파일도 저장소(Storage)에 올려 둡니다 — AI 분석(위)과 별개로,
+      // 담당자가 '텔레그램 접수' 화면에서 원본을 직접 내려받아 확인하고
+      // 딜로 등록되면 첨부파일로도 자동 연결됩니다. 이 업로드가 실패해도
+      // AI 분석·초안 저장 자체는 계속 진행합니다(원본만 못 남길 뿐).
+      try {
+        draftFile = await uploadDraftFile(buf, fileRef, isDocx ? DOCX_MIME : isPptx ? PPTX_MIME : null);
+      } catch (upErr) {
+        console.error('telegram-webhook storage upload error:', upErr);
+      }
     } catch (err) {
       console.error('telegram-webhook file error:', err);
       await sendTelegramMessage(chatId,
@@ -203,6 +219,9 @@ async function handler(req, res) {
       telegram_username: fromUsername,
       telegram_chat_id: String(chatId),
       parsed,
+      file_path: draftFile ? draftFile.file_path : null,
+      file_name: draftFile ? draftFile.file_name : null,
+      file_size: draftFile ? draftFile.file_size : null,
     });
 
     const base = process.env.APP_BASE_URL || `https://${req.headers.host}`;
@@ -325,6 +344,41 @@ async function insertDraft(row) {
   }
   const data = await resp.json();
   return data[0];
+}
+
+// 텔레그램에서 받은 원본 파일을 기존 'deal-files' Storage 버킷에 올립니다.
+// service_role 키를 쓰므로 버킷 RLS(로그인 사용자 전용)와 무관하게 저장할 수
+// 있습니다. 경로는 화면의 uploadFile()과 같은 이유로 원본 파일명을 쓰지
+// 않고 난수를 씁니다(한글 파일명 업로드 실패·주입 경로 방지). 딜별 폴더가
+// 아직 없는 '초안' 단계라 drafts/ 아래 둡니다 — 딜로 등록되면 deal_files에
+// 같은 경로를 그대로 연결하고(confirmDraft), 반려되면 이 경로의 파일을
+// 지웁니다(rejectDraft, common.js).
+async function uploadDraftFile(buf, fileRef, fallbackMimeType) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 가 설정되지 않았습니다');
+
+  const extMatch = (fileRef.file_name || '').match(/\.([A-Za-z0-9]{1,10})$/);
+  const extByMime = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+  const ext = extMatch ? extMatch[1].toLowerCase() : (extByMime[fileRef.mime_type] || '');
+  const rand = Math.random().toString(36).slice(2, 8);
+  const path = `drafts/${Date.now()}_${rand}${ext ? '.' + ext : ''}`;
+  const contentType = fileRef.mime_type || fallbackMimeType || 'application/octet-stream';
+
+  const resp = await fetch(`${url}/storage/v1/object/deal-files/${path}`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${key}`,
+      'apikey': key,
+      'content-type': contentType,
+    },
+    body: buf,
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`Storage 업로드 실패 (${resp.status}): ${errText.slice(0, 200)}`);
+  }
+  return { file_path: path, file_name: fileRef.file_name || '파일', file_size: buf.length };
 }
 
 async function sendTelegramMessage(chatId, text) {

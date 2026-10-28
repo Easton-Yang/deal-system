@@ -9,6 +9,13 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-15.0 2026-10-28  텔레그램 접수 원본 파일을 Storage에도 저장(지금까지는 AI
+//                         분석에만 쓰고 버렸음). '텔레그램 접수' 화면에서 원본을
+//                         내려받을 수 있고, "딜로 등록"하면 그 딜의 첨부파일로
+//                         자동 연결됨(deal_files). "반려"하면 저장공간을 계속
+//                         차지하지 않도록 원본도 함께 지움. deal_drafts 테이블
+//                         컬럼 추가(텔레그램접수_원본파일_SQL.sql, 아직 미실행)
+//                         라 앞자리 올림
 //   Beta-14.2 2026-10-28  대시보드 퍼널 카드 우측 상단 기간 선택 드롭다운이 화살표
 //                         아이콘과 글자("2026년 4분기")가 겹쳐 보이던 버그 수정.
 //                         .form-select 공통 스타일의 오른쪽 여백이 부족했음. 화면
@@ -208,7 +215,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-14.2';
+const APP_VERSION = 'Beta-15.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -570,6 +577,9 @@ async function getDealDrafts(status) {
 
 // 초안을 확인해 실제 딜로 등록합니다. dealData 는 담당자가 화면에서
 // 고친 최종 값입니다(AI가 뽑은 값을 그대로 쓸 수도, 고칠 수도 있습니다).
+// 초안에 텔레그램 원본 파일이 달려 있었다면(file_path), 같은 Storage
+// 경로를 그대로 새 딜의 첨부파일(deal_files)로 연결합니다(파일을 옮기진
+// 않음 — 경로만 참조하면 되고, 옮기는 API 호출을 또 추가할 필요가 없음).
 async function confirmDraft(draftId, dealData) {
   const created = await createDeal(dealData);
   const now = new Date().toISOString();
@@ -577,11 +587,33 @@ async function confirmDraft(draftId, dealData) {
     const drafts = demoGet('deal_drafts_v1');
     const idx = drafts.findIndex(d => d.id === draftId);
     if (idx !== -1) {
-      drafts[idx] = { ...drafts[idx], status: '등록완료', created_deal_id: created.id,
+      const draft = drafts[idx];
+      if (draft.file_path) {
+        const files = demoGet('files_v3');
+        files.push({
+          id: demoId(), deal_id: created.id, file_name: draft.file_name,
+          file_size: draft.file_size, uploaded_by: currentUserName(),
+          uploaded_at: now, file_path: null // 데모는 실제 파일이 없어 레코드만 흉내냄 (uploadFile과 동일)
+        });
+        demoSet('files_v3', files);
+      }
+      drafts[idx] = { ...draft, status: '등록완료', created_deal_id: created.id,
         reviewed_by: currentUserName(), reviewed_at: now };
       demoSet('deal_drafts_v1', drafts);
     }
     return created;
+  }
+  const { data: draftRow, error: fetchErr } = await getSB().from('deal_drafts')
+    .select('file_path, file_name, file_size').eq('id', draftId).single();
+  if (fetchErr) throw fetchErr;
+  if (draftRow && draftRow.file_path) {
+    // 딜은 이미 만들어졌으므로(위 createDeal), 여기서 실패해도 등록 자체를
+    // 막지 않습니다 — 첨부만 못 붙을 뿐, 나중에 상세화면에서 다시 올리면 됩니다.
+    const { error: fileErr } = await getSB().from('deal_files').insert({
+      deal_id: created.id, file_name: draftRow.file_name, file_path: draftRow.file_path,
+      file_size: draftRow.file_size, uploaded_by: currentUserName()
+    });
+    if (fileErr) console.warn('초안의 첨부파일을 딜에 연결하지 못했습니다:', fileErr.message);
   }
   const { error } = await getSB().from('deal_drafts')
     .update({ status: '등록완료', created_deal_id: created.id, reviewed_by: currentUserName(), reviewed_at: now })
@@ -591,6 +623,10 @@ async function confirmDraft(draftId, dealData) {
 }
 
 // 초안을 반려합니다 (딜로 만들지 않음). 사유는 선택 사항입니다.
+// 원본 파일이 달려 있었다면 Storage에서도 함께 지워 저장공간을 계속
+// 차지하지 않게 합니다. 삭제가 실패해도(이미 지워졌거나 일시 오류) 반려
+// 자체는 막지 않습니다 — 지워지지 않은 파일이 남는 것뿐이고, 반려를 막으면
+// 화면 상태와 DB가 어긋나는 더 큰 문제가 생깁니다.
 async function rejectDraft(draftId, reason) {
   const now = new Date().toISOString();
   if (DEMO_MODE) {
@@ -602,6 +638,12 @@ async function rejectDraft(draftId, reason) {
       demoSet('deal_drafts_v1', drafts);
     }
     return;
+  }
+  const { data: draftRow } = await getSB().from('deal_drafts')
+    .select('file_path').eq('id', draftId).single();
+  if (draftRow && draftRow.file_path) {
+    const { error: stErr } = await getSB().storage.from('deal-files').remove([draftRow.file_path]);
+    if (stErr) console.warn('반려된 초안의 첨부파일 삭제 실패:', stErr.message);
   }
   const { error } = await getSB().from('deal_drafts')
     .update({ status: '반려', reject_reason: reason || null, reviewed_by: currentUserName(), reviewed_at: now })

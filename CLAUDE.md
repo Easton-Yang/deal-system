@@ -32,7 +32,8 @@
 | `js/seed-data.js` | 데모 초기 데이터: 실제 딜 247건 (아래 참고) |
 | `딜관리시스템_DB스키마.sql` | DB 스키마 원본 (패키지의 `02_db/01_schema.sql`과 동일) |
 | `보안설정_SQL.sql` | **보안 잠금 SQL.** users 테이블 삭제 + RLS를 로그인 사용자 전용으로. 사용자가 Supabase SQL Editor에 붙여넣어 1회 실행 |
-| `텔레그램접수_테이블추가_SQL.sql` | `deal_drafts` 테이블 신규 생성 + RLS. 사용자가 Supabase SQL Editor에서 1회 실행 (2026-10-26 추가, 아직 미실행) |
+| `텔레그램접수_테이블추가_SQL.sql` | `deal_drafts` 테이블 신규 생성 + RLS. 사용자가 Supabase SQL Editor에서 1회 실행 (2026-10-26 추가, 2026-10-27 실행 완료) |
+| `텔레그램접수_원본파일_SQL.sql` | `deal_drafts`에 원본 파일 칼럼(file_path/file_name/file_size) 추가. 사용자가 Supabase SQL Editor에서 1회 실행 (2026-10-28 추가, 아직 미실행) |
 | `딜관리시스템_기능요구사항명세서_v1.0.docx` | IT 전달용 명세서 (`tools/windows/gen_frd.ps1`로 생성) |
 | `tools/check_xss.py` | escape 누락 전수 검사 (Python만 필요) |
 | `tools/make_package.py` | IT 전달 패키지 `01_src/` 재생성 + CDN 치환 검사 (맥 공통) |
@@ -81,6 +82,23 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
      "딜로 등록"을 눌러야 비로소 실제 딜이 됩니다. "반려"를 누르면 딜이 되지 않습니다.
   - **AI가 자동으로 딜을 만들지 않습니다.** 분석이 틀릴 수 있다는 전제로, 사람 확인을 반드시
     거치도록 설계했습니다(사용자가 이 방식으로 하자고 확정, 2026-10-26).
+  - **원본 파일도 Storage에 저장** (2026-10-28 추가, Beta-15.0). 그 전까지는 PDF·PPT·워드·
+    사진을 AI 분석에만 쓰고 버렸습니다(원본은 안 남음). 이제 `uploadDraftFile()`이 같은
+    버퍼를 기존 첨부파일용 `deal-files` Storage 버킷(`drafts/` 아래, service_role 키라 RLS
+    무관)에도 올리고, 경로·원본 파일명·용량을 `deal_drafts.file_path`/`file_name`/`file_size`
+    에 저장합니다(SQL은 `텔레그램접수_원본파일_SQL.sql`, **아직 미실행**).
+    **⚠️ 이 SQL을 실행하기 전에 이 코드를 배포하면 텔레그램 접수 전체가 멈춥니다** — `deal_drafts`
+    에 `file_path`/`file_name`/`file_size` 칼럼이 없는 상태로 `insertDraft()`가 그 칼럼들을 포함해
+    INSERT를 보내면 PostgREST가 "칼럼을 찾을 수 없음" 오류로 거부하고, 이건 파일 첨부 메시지뿐
+    아니라 **텍스트만 보낸 메시지도 전부** 포함됩니다(모든 초안 저장이 이 INSERT 하나를 거침).
+    그래서 반드시 **SQL 실행 → (Vercel 재배포 확인) → 사용 재개** 순서를 지켜야 합니다(과거
+    "코드 배포 후 SQL 안 돌림" 사고와 같은 종류의 실수이니 이번엔 미리 적어 둠).
+    `deal-drafts.html`에서 원본을 내려받을 수 있고, "딜로 등록"하면
+    `confirmDraft()`가 같은 경로를 그대로 `deal_files`에 연결합니다(파일을 옮기지 않고 경로만
+    참조). "반려"하면 `rejectDraft()`가 Storage에서도 함께 지워 저장공간을 계속 차지하지
+    않게 합니다(삭제 실패는 경고만, 반려 자체는 막지 않음 — addStageHistory와 같은 패턴).
+    Storage 업로드 자체가 실패해도(네트워크 오류 등) AI 분석·초안 저장은 계속 진행됩니다
+    (원본만 못 남길 뿐).
   - 비용·스팸 방지로 `ALLOWED_TELEGRAM_USER_IDS` 환경변수에 등록된 텔레그램 ID만 받습니다.
     봇에게 `/myid`를 보내면 본인 ID를 알려줍니다. 현재 사용자 본인 ID(`1135011873`)만 등록됨 —
     팀원 추가는 각자 `/myid` 받아서 Vercel `ALLOWED_TELEGRAM_USER_IDS`에 쉼표로 추가하면 됨.
@@ -376,6 +394,11 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
     - (선택, 미설정) `TELEGRAM_USER_MAP` 환경변수(JSON, 예: `{"123456789":"dongmin.yang"}`)를
       추가하면 보낸 사람을 담당자로 자동 지정합니다. 안 넣으면 담당자는 '미배정'으로
       뜨고 화면에서 고르면 됩니다.
+    8. ⬜ **🔴 급함 — `텔레그램접수_원본파일_SQL.sql` 실행**: 원본 파일 저장 기능
+       (Beta-15.0, 위 "텔레그램 딜 접수" 항목의 "원본 파일도 Storage에 저장" 참고)이
+       코드로는 배포됐지만, 이 SQL(`deal_drafts`에 file_path/file_name/file_size
+       칼럼 추가)을 실행하기 전까지는 **텔레그램 접수 전체가 멈춥니다**(텍스트만
+       보낸 메시지도 포함). Supabase SQL Editor에 붙여넣고 Run 하면 바로 해결됩니다.
 
 - **대시보드 딜 퍼널 그래픽** (2026-10-27 추가, Beta-11.1~11.4). 사용자가 올려준 참고 이미지
   (깔때기 모양으로 전체 접수 건수 → 각 단계 통과 → 최종 투자 건수를 보여주는 그래픽, 사용자

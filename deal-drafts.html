@@ -72,6 +72,36 @@
 let rejectModal = null;
 let rejectingDraftId = null;
 
+function draftFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes >= 1048576) return (bytes/1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024)    return (bytes/1024).toFixed(0) + ' KB';
+  return bytes + ' B';
+}
+
+// 첨부파일 다운로드 (deal-detail.html의 downloadFileUI와 동일한 방식).
+// 파일 경로·이름을 onclick 속성에 직접 끼워 넣지 않고 data-* + 이벤트
+// 위임으로 처리합니다(따옴표가 든 파일명이 속성을 벗어나는 것 방지).
+async function downloadDraftFileUI(btn, filePath, fileName) {
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const url = await getFileUrl(filePath, fileName);
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    showToast(e.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
 // selected 값은 비교(===)에만 쓰이고 화면에 직접 찍히지 않으므로,
 // check_xss.py 가 잡아내는 4건(asset_class 등)은 실제 취약점이 아닙니다.
 function optionsHtml(list, selected) {
@@ -106,6 +136,13 @@ function draftCardHtml(d) {
         <div class="text-muted small mb-1">원문</div>
         <div style="white-space:pre-wrap">${escapeHtml(d.raw_message)}</div>
       </div>
+      ${d.file_path ? `
+      <div class="mb-3 p-2 bg-light border rounded d-flex align-items-center justify-content-between">
+        <span><i class="fas fa-paperclip me-1"></i>${escapeHtml(d.file_name || '첨부파일')}${d.file_size ? ` <span class="text-muted small">(${draftFileSize(d.file_size)})</span>` : ''}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary js-draft-download-file" data-path="${escapeHtml(d.file_path)}" data-name="${escapeHtml(d.file_name || '첨부파일')}">
+          <i class="fas fa-download me-1"></i>원본 다운로드
+        </button>
+      </div>` : ''}
 
       <div class="row g-3">
         <div class="col-md-6">
@@ -190,6 +227,13 @@ function draftCardHtml(d) {
 async function loadDrafts() {
   const listEl = document.getElementById('draftList');
   listEl.innerHTML = '<div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-3">불러오는 중...</p></div>';
+  if (!listEl.dataset.delegated) {
+    listEl.addEventListener('click', function (e) {
+      const dl = e.target.closest('.js-draft-download-file');
+      if (dl) downloadDraftFileUI(dl, dl.dataset.path, dl.dataset.name);
+    });
+    listEl.dataset.delegated = '1';
+  }
   try {
     const drafts = await getDealDrafts('대기');
     if (drafts.length === 0) {

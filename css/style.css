@@ -331,6 +331,9 @@ body {
   font-size: 14px;
   padding: 8px 12px;
 }
+.form-select {
+  padding-right: 2.25rem;
+}
 .form-control:focus, .form-select:focus {
   border-color: var(--navy-light);
   box-shadow: 0 0 0 3px rgba(57,73,171,.12);

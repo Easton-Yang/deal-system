@@ -319,16 +319,22 @@
   }
 
   // '드랍'된 딜의 공이 깔때기 밖으로 튕겨나가 멈추는 자리를 계산합니다.
-  // 같은 단계에서 드랍된 공이 여러 개면 좌우로 번갈아, 바깥쪽으로 조금씩
-  // 더 멀리 자리를 잡아 서로 겹치지 않게 합니다.
+  // 좌우로 번갈아 바깥쪽에 작은 격자(그리드)를 채웁니다 — 한쪽에 한 줄(가로)이
+  // 다 차면 다음 줄(세로)로 넘어갑니다. 예전에는 가로로만 점점 멀리 벌리다
+  // 카드 폭 한계에 닿으면 전부 같은 자리(8px)에 겹쳐 쌓였습니다(드랍이 많은
+  // 단계에서 공들이 한 덩어리로 뭉쳐 보이던 원인). 세로로도 펼쳐지므로 드랍
+  // 건수가 아무리 많아도 서로 겹치지 않습니다.
   function funnelEjectSlot(geo, stageIdx, index) {
     const b = geo.bands[stageIdx];
-    const y = Math.min(b.yTop + geo.segH * 0.55 + (index % 3) * 5, b.yBot - 6);
+    const cols = 2, cellX = 12, cellY = 13;
     const side = index % 2 === 0 ? -1 : 1;
-    const ringW = funnelWidthAtY(geo, y);
-    const margin = 10 + Math.floor(index / 2) * 12;
-    let x = geo.width / 2 + side * (ringW / 2 + margin);
-    x = Math.min(Math.max(x, 8), geo.width - 8); // 카드 밖으로 넘어가지 않게
+    const sideIdx = Math.floor(index / 2);
+    const col = sideIdx % cols;
+    const row = Math.floor(sideIdx / cols);
+    const y = b.yTop + geo.segH * 0.35 + row * cellY;
+    const ringW = funnelWidthAtY(geo, b.yTop);
+    const margin = 12 + col * cellX;
+    const x = geo.width / 2 + side * (ringW / 2 + margin);
     return { x, y };
   }
 
@@ -383,7 +389,37 @@
     }
   }
 
+  // 공 말풍선은 항상 공의 왼쪽에 뜹니다(css/style.css의 .funnel-tooltip).
+  // 다만 공이 깔때기의 왼쪽 가장자리에 가까우면, 왼쪽으로 뜬 말풍선이 왼쪽
+  // 사이드바(고정 위치, z-index가 더 높음) 뒤로 들어가 가려질 수 있습니다.
+  // 그려진 뒤 실제 위치를 확인해서, 사이드바와 겹치면 안 가려질 만큼만
+  // 오른쪽으로 밀어줍니다(--tip-shift CSS 변수).
+  function showFunnelTooltip(tooltipEl, ballEl, dealName) {
+    if (!tooltipEl) return;
+    tooltipEl.textContent = dealName || '';
+    tooltipEl.style.left = ballEl.style.left;
+    tooltipEl.style.top = ballEl.style.top;
+    tooltipEl.style.setProperty('--tip-shift', '0px');
+    tooltipEl.classList.add('show');
+    requestAnimationFrame(() => {
+      if (!tooltipEl.classList.contains('show')) return; // 그 사이 숨겨졌으면 건너뜀
+      const rect = tooltipEl.getBoundingClientRect();
+      const sidebarEl = document.getElementById('sidebar');
+      const minX = (sidebarEl ? sidebarEl.getBoundingClientRect().right : 0) + 8;
+      if (rect.left < minX) tooltipEl.style.setProperty('--tip-shift', (minX - rect.left) + 'px');
+    });
+  }
+
   let funnelEpoch = 0;
+
+  // 공을 다른 곳을 눌러 선택 해제(아래 startFunnelBallLoop의 '한 번 더 클릭'
+  // 참고). 이 리스너는 페이지 스크립트가 처음 실행될 때 한 번만 등록되고,
+  // 공 쪽 클릭은 stopPropagation()으로 여기까지 올라오지 않습니다.
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.funnel-ball.selected').forEach(b => b.classList.remove('selected'));
+    const tip = document.getElementById('funnelTooltip');
+    if (tip) tip.classList.remove('show');
+  });
 
   // dealBalls: common.js getDealFunnelStats()의 deals 목록 ({id, deal_name, stopStage}).
   // 공 애니메이션은 화면에 뜰 때(또는 기간을 바꿀 때) 딱 한 번만 재생되고, 다 떨어진
@@ -433,19 +469,24 @@
       // 호버하면 바로 뜨는 말풍선(네이티브 title 속성은 뜨는 데 1초 안팎 걸려서
       // 안 보일 수 있었습니다 — Beta-11.7). textContent로 넣으므로 HTML 삽입이
       // 아니라 escapeHtml 없이도 안전합니다.
-      el.addEventListener('mouseenter', () => {
-        if (!tooltipEl) return;
-        tooltipEl.textContent = db.deal_name || '';
-        tooltipEl.style.left = el.style.left;
-        tooltipEl.style.top = el.style.top;
-        tooltipEl.classList.add('show');
-      });
+      el.addEventListener('mouseenter', () => showFunnelTooltip(tooltipEl, el, db.deal_name));
       el.addEventListener('mouseleave', () => {
-        if (tooltipEl) tooltipEl.classList.remove('show');
+        // 한 번 클릭해 선택된 공은 마우스가 벗어나도 말풍선을 유지합니다
+        // (선택 표시이자, 한 번 더 누르면 이동한다는 안내이기도 함).
+        if (tooltipEl && !el.classList.contains('selected')) tooltipEl.classList.remove('show');
       });
+      // 모바일은 '호버' 개념이 없어서, 바로 이동하면 한 번 누르는 것만으로
+      // 실수로 다른 화면으로 넘어가기 쉽습니다. 그래서 처음 누르면 선택만
+      // 되고(말풍선 표시), 같은 공을 한 번 더 눌러야 상세화면으로 이동합니다.
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        window.location.href = `deal-detail.html?id=${db.id}`;
+        if (el.classList.contains('selected')) {
+          window.location.href = `deal-detail.html?id=${db.id}`;
+          return;
+        }
+        ballLayer.querySelectorAll('.funnel-ball.selected').forEach(other => other.classList.remove('selected'));
+        el.classList.add('selected');
+        showFunnelTooltip(tooltipEl, el, db.deal_name);
       });
       ballLayer.appendChild(el);
 

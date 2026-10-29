@@ -265,7 +265,18 @@ async function extractDealFields(text, fileContent) {
       type: 'object',
       properties: {
         deal_name: { type: 'string', description: '딜명(프로젝트명). 메시지에 분명한 이름이 없으면 핵심 내용을 20자 내로 요약해서 지음' },
-        asset_class: { type: 'string', enum: ['기업 Equity','부동산','인프라','기업 Debt','상장주식','메자닌/비상장','공모주','원화채권','해외채권','기타'] },
+        asset_class: {
+          type: 'string',
+          enum: ['기업 Equity','부동산','인프라','기업 Debt','상장주식','메자닌/비상장','공모주','원화채권','해외채권','기타'],
+          description:
+            '자산군 분류. 특히 채권성 자산은 혼동하기 쉬우니 다음 기준으로 구분하세요.\n' +
+            '- "원화채권": 원화로 발행되어 채권시장에서 유가증권 형태로 유통되는 채권 전반. ' +
+            '일반 회사채, ABS(자산유동화증권), 신종자본증권(영구채·하이브리드채권), 금융채, 국공채 등이 해당합니다. ' +
+            '발행사가 일반 기업이어도 이 채권들은 "기업 Debt"가 아니라 "원화채권"입니다.\n' +
+            '- "기업 Debt": 비상장 기업을 상대로 한 사모대출·직접대출(private debt/direct lending) 등 ' +
+            '채권시장 유가증권이 아닌 당사자 간 개별 여신·대출 계약. 투자수단이 "대출"인 경우가 대부분입니다.\n' +
+            '- "해외채권": 외화로 발행되는 채권.',
+        },
         deal_size: { type: 'integer', description: '투자 규모, 원 단위 정수. 예: 50억원 → 5000000000' },
         introducer_gp: { type: 'string', description: '소개자 또는 GP명' },
         investment_vehicle: { type: 'string', enum: ['대출','사채','보통주','우선주','CB','펀드지분','기타'] },

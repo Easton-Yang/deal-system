@@ -9,6 +9,44 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-15.3 2026-10-29  대시보드 퍼널 공 3가지 개선: 1) 드랍된 공이 한곳에 겹쳐
+//                         보이던 문제 — 깔때기 밖에 격자(그리드)로 배치해 줄이
+//                         차면 다음 줄로 넘어가게 함(예전엔 가로로만 벌리다 카드
+//                         폭 한계에 닿으면 전부 같은 자리에 겹침). 2) 말풍선이
+//                         항상 공의 왼쪽에 뜨도록 고정(왼쪽 사이드바에 가려지는
+//                         경우가 있었음), 그래도 사이드바와 겹치면 실제 위치를
+//                         보고 자동으로 밀어주는 안전장치 추가. 3) 공 클릭 한
+//                         번에 바로 상세화면으로 이동하던 것을, 처음 클릭은
+//                         선택(말풍선 유지)만 하고 같은 공을 한 번 더 눌러야
+//                         이동하도록 변경(모바일은 호버가 없어 한 번의 탭이
+//                         그대로 실수로 이동하는 문제였음). 화면 로직·CSS
+//                         수정이라 뒷자리 +1
+//   Beta-15.2 2026-10-29  텔레그램 접수 AI 분류 10종 전체 정교화: 자산군 구분 순서를
+//                         명시해 우선순위를 못박음 — 1)부동산·2)인프라 프로젝트는
+//                         대출 형태여도 '기업 Debt'가 아니라 그 자산군으로, 3)~4)
+//                         원화·해외채권, 5)공모주, 6)상장주식, 7)비상장기업 지분
+//                         (CB·BW·RCPS라도 지분 성격 뚜렷하면 '기업 Equity'),
+//                         8)그 외 CB·BW·RCPS는 '메자닌/비상장'(기본값), 9)일반
+//                         사업회사 대상 사모대출만 '기업 Debt', 10)그 외 '기타'.
+//                         부동산/인프라 대출 우선 규칙, CB 등 지분/메자닌 구분
+//                         기준은 사용자에게 확인 후 반영. api/telegram-webhook.js
+//                         프롬프트 수정이라 뒷자리 +1
+//   Beta-15.1 2026-10-29  텔레그램 접수 AI 분류 개선: 자산군 구분 기준에 설명을 추가해,
+//                         회사채·ABS·신종자본증권 같은 채권성 상품이 "기업 Debt"로
+//                         잘못 분류되던 것을 "원화채권"으로 가게 함(기업 Debt는
+//                         비상장기업 사모대출·직접대출 전용). api/telegram-webhook.js
+//                         프롬프트 수정이라 뒷자리 +1
+//   Beta-15.0 2026-10-28  텔레그램 접수 원본 파일을 Storage에도 저장(지금까지는 AI
+//                         분석에만 쓰고 버렸음). '텔레그램 접수' 화면에서 원본을
+//                         내려받을 수 있고, "딜로 등록"하면 그 딜의 첨부파일로
+//                         자동 연결됨(deal_files). "반려"하면 저장공간을 계속
+//                         차지하지 않도록 원본도 함께 지움. deal_drafts 테이블
+//                         컬럼 추가(텔레그램접수_원본파일_SQL.sql, 아직 미실행)
+//                         라 앞자리 올림
+//   Beta-14.2 2026-10-28  대시보드 퍼널 카드 우측 상단 기간 선택 드롭다운이 화살표
+//                         아이콘과 글자("2026년 4분기")가 겹쳐 보이던 버그 수정.
+//                         .form-select 공통 스타일의 오른쪽 여백이 부족했음. 화면
+//                         CSS 수정이라 뒷자리 +1
 //   Beta-14.1 2026-10-28  상단 브랜드 클릭 시 대시보드 이동. 진행경과 소요시간 표시·계산 제거.
 //   Beta-14.0 2026-10-27  왼쪽 하단 마이페이지 추가: 프로필(이름·부서·직함), 본인 비밀번호 변경.
 //                         현재 비밀번호 재검증 후 Auth로 변경하며 로그인 아이디는 유지.
@@ -204,7 +242,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-14.1';
+const APP_VERSION = 'Beta-15.3';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -268,11 +306,21 @@ const STAGE_BADGE = {
   '드랍':    'bg-danger'
 };
 
+// 파스텔톤 배경(도넛 차트·배지 바탕)과, 그 위에서 잘 읽히도록 같은 색상
+// 계열의 짙은 글자색(ASSET_TEXT_COLOR, 배지 전용)을 한 쌍으로 둡니다.
+// 10개 자산군이 서로 다른 색상 계열(남색/초록/주황/보라/분홍/노랑/갈색/
+// 청록/하늘색/회청색)을 쓰도록 골라 한눈에 구분되게 했습니다(Beta-15.4).
 const ASSET_COLOR = {
-  '기업 Equity': '#1a237e', '부동산':       '#2e7d32', '인프라':  '#e65100',
-  '기업 Debt':   '#6a1b9a', '상장주식':     '#ad1457', '메자닌/비상장':'#f06292',
-  '공모주':      '#8d6e63', '원화채권':     '#00695c', '해외채권':'#0097a7',
-  '기타':        '#616161'
+  '기업 Equity': '#c5cae9', '부동산':       '#c8e6c9', '인프라':  '#ffe0b2',
+  '기업 Debt':   '#e1bee7', '상장주식':     '#f8bbd0', '메자닌/비상장':'#fff9c4',
+  '공모주':      '#d7ccc8', '원화채권':     '#b2dfdb', '해외채권':'#b2ebf2',
+  '기타':        '#cfd8dc'
+};
+const ASSET_TEXT_COLOR = {
+  '기업 Equity': '#283593', '부동산':       '#2e7d32', '인프라':  '#e65100',
+  '기업 Debt':   '#6a1b9a', '상장주식':     '#ad1457', '메자닌/비상장':'#f57f17',
+  '공모주':      '#5d4037', '원화채권':     '#00695c', '해외채권':'#00838f',
+  '기타':        '#455a64'
 };
 
 const RESULT_BADGE = {
@@ -566,6 +614,9 @@ async function getDealDrafts(status) {
 
 // 초안을 확인해 실제 딜로 등록합니다. dealData 는 담당자가 화면에서
 // 고친 최종 값입니다(AI가 뽑은 값을 그대로 쓸 수도, 고칠 수도 있습니다).
+// 초안에 텔레그램 원본 파일이 달려 있었다면(file_path), 같은 Storage
+// 경로를 그대로 새 딜의 첨부파일(deal_files)로 연결합니다(파일을 옮기진
+// 않음 — 경로만 참조하면 되고, 옮기는 API 호출을 또 추가할 필요가 없음).
 async function confirmDraft(draftId, dealData) {
   const created = await createDeal(dealData);
   const now = new Date().toISOString();
@@ -573,11 +624,33 @@ async function confirmDraft(draftId, dealData) {
     const drafts = demoGet('deal_drafts_v1');
     const idx = drafts.findIndex(d => d.id === draftId);
     if (idx !== -1) {
-      drafts[idx] = { ...drafts[idx], status: '등록완료', created_deal_id: created.id,
+      const draft = drafts[idx];
+      if (draft.file_path) {
+        const files = demoGet('files_v3');
+        files.push({
+          id: demoId(), deal_id: created.id, file_name: draft.file_name,
+          file_size: draft.file_size, uploaded_by: currentUserName(),
+          uploaded_at: now, file_path: null // 데모는 실제 파일이 없어 레코드만 흉내냄 (uploadFile과 동일)
+        });
+        demoSet('files_v3', files);
+      }
+      drafts[idx] = { ...draft, status: '등록완료', created_deal_id: created.id,
         reviewed_by: currentUserName(), reviewed_at: now };
       demoSet('deal_drafts_v1', drafts);
     }
     return created;
+  }
+  const { data: draftRow, error: fetchErr } = await getSB().from('deal_drafts')
+    .select('file_path, file_name, file_size').eq('id', draftId).single();
+  if (fetchErr) throw fetchErr;
+  if (draftRow && draftRow.file_path) {
+    // 딜은 이미 만들어졌으므로(위 createDeal), 여기서 실패해도 등록 자체를
+    // 막지 않습니다 — 첨부만 못 붙을 뿐, 나중에 상세화면에서 다시 올리면 됩니다.
+    const { error: fileErr } = await getSB().from('deal_files').insert({
+      deal_id: created.id, file_name: draftRow.file_name, file_path: draftRow.file_path,
+      file_size: draftRow.file_size, uploaded_by: currentUserName()
+    });
+    if (fileErr) console.warn('초안의 첨부파일을 딜에 연결하지 못했습니다:', fileErr.message);
   }
   const { error } = await getSB().from('deal_drafts')
     .update({ status: '등록완료', created_deal_id: created.id, reviewed_by: currentUserName(), reviewed_at: now })
@@ -587,6 +660,10 @@ async function confirmDraft(draftId, dealData) {
 }
 
 // 초안을 반려합니다 (딜로 만들지 않음). 사유는 선택 사항입니다.
+// 원본 파일이 달려 있었다면 Storage에서도 함께 지워 저장공간을 계속
+// 차지하지 않게 합니다. 삭제가 실패해도(이미 지워졌거나 일시 오류) 반려
+// 자체는 막지 않습니다 — 지워지지 않은 파일이 남는 것뿐이고, 반려를 막으면
+// 화면 상태와 DB가 어긋나는 더 큰 문제가 생깁니다.
 async function rejectDraft(draftId, reason) {
   const now = new Date().toISOString();
   if (DEMO_MODE) {
@@ -598,6 +675,12 @@ async function rejectDraft(draftId, reason) {
       demoSet('deal_drafts_v1', drafts);
     }
     return;
+  }
+  const { data: draftRow } = await getSB().from('deal_drafts')
+    .select('file_path').eq('id', draftId).single();
+  if (draftRow && draftRow.file_path) {
+    const { error: stErr } = await getSB().storage.from('deal-files').remove([draftRow.file_path]);
+    if (stErr) console.warn('반려된 초안의 첨부파일 삭제 실패:', stErr.message);
   }
   const { error } = await getSB().from('deal_drafts')
     .update({ status: '반려', reject_reason: reason || null, reviewed_by: currentUserName(), reviewed_at: now })
@@ -930,8 +1013,9 @@ function stageBadge(stage) {
 }
 
 function assetBadge(ac) {
-  const col = ASSET_COLOR[ac] || '#616161';
-  return `<span class="badge" style="background:${col}">${ac}</span>`;
+  const col = ASSET_COLOR[ac] || '#cfd8dc';
+  const textCol = ASSET_TEXT_COLOR[ac] || '#455a64';
+  return `<span class="badge" style="background:${col};color:${textCol}">${ac}</span>`;
 }
 
 function resultBadge(result) {

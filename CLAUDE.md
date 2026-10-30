@@ -24,7 +24,7 @@
 | `deal-new.html` | 새 딜 입력 |
 | `deal-detail.html` | 상세: 편집, 단계 바, 메모, 첨부, 단계 이력 |
 | `portfolio.html` | 진행경과: 딜별 단계 소요일 타임라인 |
-| `weekly-report.html` | 주간보고: 요약(숫자 5개+문장) + 이번 주 신규접수·단계변경·결정 + IC 결정대기·기한초과 스냅샷. 인쇄/PDF엔 레터헤드도 포함 |
+| `weekly-report.html` | 보고양식(주간/월간/분기, `?period=`): 요약(숫자 5개+문장) + 신규접수·단계변경·결정 + IC 결정대기·기한초과 스냅샷. 인쇄/PDF엔 레터헤드도 포함 |
 | `deal-drafts.html` | 텔레그램 접수 확인: AI가 분석한 초안을 담당자가 확인·수정 후 딜로 등록/반려 (2026-10-26 추가) |
 | `api/telegram-webhook.js` | 텔레그램 봇 웹훅(Vercel 서버 함수). 텍스트·PDF·PPT·워드·사진 수신 → Claude API로 항목 추출 → `deal_drafts`에 저장 → 텔레그램 답장. service_role 키 사용 |
 | `js/config.js` | DEMO_MODE, Supabase URL/KEY, TEAM_MEMBERS, LOGIN_EMAIL_DOMAIN |
@@ -598,6 +598,24 @@ HTML은 `config.js` → `seed-data.js` → `common.js` 순서로 스크립트를
   - 로컬에서 이번 주 날짜·IC단계·기한초과 딜을 `localStorage`에 직접 주입해 요약 숫자·
     문장이 상세 표와 일치하는지, 인쇄 미리보기(레터헤드 포함)가 의도대로 나오는지
     확인했습니다. IT 전달 패키지도 재생성했습니다.
+  - **"보고양식"으로 확장 — 주간/월간/분기 (2026-10-30 추가, Beta-17.0)**. 사용자가
+    "왼쪽 탭(보고양식)을 누르면 아래 주간/월간/분기 보고로 가지쳐서 탭이 보이게" 요청.
+    - **사이드바** (`common.js`의 `renderNav()`): "주간보고" 단일 링크를 "보고양식"
+      그룹으로 바꿨습니다. `data-bs-toggle="collapse"`(Bootstrap, 이미 모든 화면에
+      `bootstrap.bundle.min.js`가 있어 추가 로드 불필요)로 누르면 아래에 주간보고/
+      월간보고/분기보고 3개 하위 링크가 펼쳐집니다. 지금 그 하위 페이지 중 하나를
+      보고 있으면 `renderNav()`가 처음부터 펼쳐둡니다(`reportOpen` 판정).
+    - **화면 쪽**: 새 화면을 만들지 않고 `weekly-report.html` 하나를
+      `?period=week`/`month`/`quarter` 쿼리로 나눠 씁니다. `PERIOD_META` 표
+      하나에 날짜 범위 계산 함수(`getWeekRange`/`getMonthRange`/`getQuarterRange`,
+      월·분기는 이번에 추가)·페이지 제목·버튼 문구(이전/이번/다음 주·달·분기)·
+      레터헤드 제목·요약 문장에 쓰는 "이번 주/달/분기" 단위를 전부 묶어뒀습니다.
+      데이터 필터링·집계 로직(`loadReport()`, `summarySection()`, 5개 섹션)은
+      그대로이고 `getPeriodRange(offset)`이 돌려주는 날짜 범위만 바뀝니다.
+    - 로컬에서 세 탭(`?period=week|month|quarter`)을 전부 열어 날짜 범위·제목·
+      버튼 문구·레터헤드·사이드바 활성 표시가 맞는지, "보고양식" 클릭 시 하위
+      탭이 펼쳐지는지, 다른 화면(딜 목록 등)에서는 접혀 있는지 브라우저로
+      확인했습니다. IT 전달 패키지도 재생성했습니다.
 
 ## 환경 주의사항
 

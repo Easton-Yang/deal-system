@@ -9,6 +9,15 @@
 //   큰 변화(화면 추가, 기능 추가, DB 변경)  → 앞자리 +1  (Beta-1.9 → Beta-2.0)
 // 변경 내역은 아래 표에 한 줄씩 적어 둡니다.
 //
+//   Beta-16.0 2026-10-30  주간보고를 "실제 보고서 형태"로 — 인쇄/PDF에만 보이는
+//                         레터헤드(회사 로고·제목·보고기간·작성자)를 추가하고,
+//                         맨 위에 숫자 5개(신규접수·단계변경·투자결정·결정대기·
+//                         기한초과)와 그걸 그대로 엮은 요약 문장을 넣었습니다
+//                         (화면·인쇄 둘 다 보임, 아래 표들과 같은 값이라 따로
+//                         집계하지 않아 어긋날 일이 없음). 기존 5개 섹션에는
+//                         번호(1~5)를 붙였습니다. weekly-report.html·css/
+//                         style.css 수정, IT 패키지 재생성. 화면 기능 추가라
+//                         앞자리 올림
 //   Beta-15.5 2026-10-29  자산군 색을 파스텔톤에서 다시 진한 색으로 교체(사용자가
 //                         "너무 연하다"고 해서). 남색/초록/주황/보라/분홍/올리브/
 //                         갈색/청록/파랑/회청색 10개 계열로 고르게 벌려 구분했고,
@@ -256,7 +265,7 @@
 //                         관리 화면 분리. 화면 2개 추가 + DB 변경이라 앞자리 올림
 //   Beta-1.2  2026-10-01  Supabase 연결, 실제 딜 247건 업로드, RLS 정책 적용
 //   Beta-1.1  (이전)      데모 모드 기능 완성 (대시보드·목록·칸반·상세·진행경과)
-const APP_VERSION = 'Beta-15.5';
+const APP_VERSION = 'Beta-16.0';
 
 // 상수 정의
 const STAGES = ['접수', '1차검토', '심층검토', 'IC', '투자확정', '드랍'];
@@ -1069,27 +1078,54 @@ function getUrlParam(name) {
 // ── 네비게이션 렌더링 ──────────────────────────────────────────
 
 function renderNav(activePage) {
-  const pages = [
+  const headPages = [
     { id:'dashboard', label:'대시보드',   icon:'fa-chart-pie',      href:'index.html' },
     { id:'deals',     label:'딜 목록',    icon:'fa-list',           href:'deals.html' },
     { id:'kanban',    label:'칸반 보드',  icon:'fa-columns',        href:'deals.html?view=kanban' },
     { id:'portfolio', label:'진행경과',   icon:'fa-project-diagram', href:'portfolio.html' },
-    { id:'report',    label:'주간보고',   icon:'fa-file-lines',     href:'weekly-report.html' },
+  ];
+  const tailPages = [
     { id:'drafts',    label:'텔레그램 접수', icon:'fa-robot',       href:'deal-drafts.html' },
     { id:'new',       label:'새 딜 입력', icon:'fa-plus-circle',    href:'deal-new.html' },
   ];
+  // "보고양식" 하위 탭 — weekly-report.html 한 화면을 ?period= 로 나눠 씁니다.
+  const reportPages = [
+    { id:'report-week',    label:'주간보고', href:'weekly-report.html?period=week' },
+    { id:'report-month',   label:'월간보고', href:'weekly-report.html?period=month' },
+    { id:'report-quarter', label:'분기보고', href:'weekly-report.html?period=quarter' },
+  ];
+  const reportOpen = reportPages.some(p => p.id === activePage);
 
   // 라이브는 초록, 데모는 노랑 + '데모' 표시. 둘 다 버전을 함께 보여줍니다.
   const modeLabel = DEMO_MODE
     ? '<span class="badge bg-warning text-dark">데모 ' + APP_VERSION + '</span>'
     : '<span class="badge bg-success">' + APP_VERSION + '</span>';
 
-  const items = pages.map(p => `
+  const navItem = p => `
     <li class="nav-item">
       <a href="${p.href}" class="nav-link ${activePage===p.id?'active':''}">
         <i class="fas ${p.icon} me-2"></i>${p.label}
       </a>
-    </li>`).join('');
+    </li>`;
+
+  // "보고양식"을 누르면 아래에 주간/월간/분기 탭이 가지쳐서 나타납니다
+  // (Bootstrap collapse). 지금 그 하위 탭 중 하나를 보고 있으면 처음부터
+  // 펼쳐져 있습니다.
+  const reportGroup = `
+    <li class="nav-item">
+      <a href="#sidebarReportSubmenu" class="nav-link ${reportOpen?'active':''}" data-bs-toggle="collapse"
+         role="button" aria-expanded="${reportOpen}" aria-controls="sidebarReportSubmenu">
+        <i class="fas fa-file-lines me-2"></i>보고양식<i class="fas fa-chevron-down ms-auto nav-caret"></i>
+      </a>
+      <ul class="collapse nav flex-column nav-submenu ${reportOpen?'show':''}" id="sidebarReportSubmenu">
+        ${reportPages.map(p => `
+          <li class="nav-item">
+            <a href="${p.href}" class="nav-link ${activePage===p.id?'active':''}">${p.label}</a>
+          </li>`).join('')}
+      </ul>
+    </li>`;
+
+  const items = headPages.map(navItem).join('') + reportGroup + tailPages.map(navItem).join('');
 
   const target = document.getElementById('sidebar');
   if (!target) return;

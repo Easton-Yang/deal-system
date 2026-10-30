@@ -72,6 +72,11 @@ body {
 #sidebar .nav-link.active { background: var(--navy-light); color:#fff; font-weight:600; }
 #sidebar .nav-link i     { width:18px; text-align:center; }
 
+/* "보고양식" 처럼 누르면 하위 탭이 가지쳐 나오는 메뉴 */
+.nav-caret { font-size: 11px; transition: transform .15s; }
+#sidebar .nav-link[aria-expanded="true"] .nav-caret { transform: rotate(180deg); }
+.nav-submenu .nav-link { padding-left: 42px; font-size: 13px; }
+
 .sidebar-footer {
   margin-top: auto;
   padding: 16px 18px;

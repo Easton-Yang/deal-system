@@ -35,10 +35,19 @@
 
   <div class="content-area">
 
-    <!-- 인쇄 전용 제목 (화면에는 숨김) -->
-    <div class="print-only mb-3">
-      <h2 class="mb-0">딜 관리 시스템 — 주간 보고</h2>
-      <p class="text-muted" id="weekRangeLabelPrint"></p>
+    <!-- 인쇄 전용 표지(레터헤드) — 화면에는 숨기고, 인쇄/PDF에만 보입니다 -->
+    <div class="print-only report-letterhead mb-3">
+      <div class="report-letterhead-top">
+        <img src="img/woongjin-preed-logo.png" alt="Woongjin PREED Life">
+        <span id="reportPrintedAt"></span>
+      </div>
+      <h2 class="mb-2">자산운용팀 주간 업무보고</h2>
+      <table class="report-meta-table">
+        <tr>
+          <th>보고기간</th><td id="weekRangeLabelPrint"></td>
+          <th>작성</th><td id="reportAuthorPrint"></td>
+        </tr>
+      </table>
     </div>
 
     <div id="reportBody">
@@ -93,11 +102,11 @@ function reportTable(headers, rows, emptyMsg) {
   </table></div>`;
 }
 
-function sectionCard(icon, title, count, bodyHTML, note) {
+function sectionCard(num, icon, title, count, bodyHTML, note) {
   return `
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fas ${icon} me-2"></i>${title}</span>
+        <span><i class="fas ${icon} me-2"></i>${num}. ${title}</span>
         <span class="badge bg-secondary">${count}건</span>
       </div>
       ${note ? `<div class="px-3 pt-2 text-muted" style="font-size:12px">${note}</div>` : ''}
@@ -110,7 +119,9 @@ function sectionCard(icon, title, count, bodyHTML, note) {
 async function loadReport() {
   const { start, end } = getWeekRange(weekOffset);
   document.getElementById('weekRangeLabel').textContent = fmtRange(start, end) + ' 기준';
-  document.getElementById('weekRangeLabelPrint').textContent = fmtRange(start, end) + ' 기준';
+  document.getElementById('weekRangeLabelPrint').textContent = fmtRange(start, end);
+  document.getElementById('reportAuthorPrint').textContent = displayUserName(currentUserName());
+  document.getElementById('reportPrintedAt').textContent = '출력일 ' + formatDate(new Date().toISOString());
 
   const deals = await getDeals();
   const dealById = {};
@@ -198,30 +209,71 @@ function overdueRow(d) {
   </tr>`;
 }
 
+// 보고서 맨 앞에 오는 "요약" — 숫자 5개를 한눈에 보여주고, 그 숫자들을 그대로
+// 엮은 문장을 붙입니다. 사람이 쓴 것처럼 보이지만 전부 위에서 이미 계산한
+// 값이라, 아래 표들과 절대 어긋나지 않습니다(별도로 집계하지 않음).
+function summarySection(data) {
+  const { newIntakes, stageChanges, decisions, needsDecision, overdue } = data;
+  const invested = decisions.filter(h => h.stage === '투자확정').length;
+  const dropped = decisions.filter(h => h.stage === '드랍').length;
+
+  const narrative = `이번 주 신규 ${newIntakes.length}건이 접수되었고, ${stageChanges.length}건의 단계 진행이 있었습니다. ` +
+    `투자 결정은 ${decisions.length}건(투자확정 ${invested}건 · 드랍 ${dropped}건)이었습니다. ` +
+    (needsDecision.length > 0
+      ? `현재 투자심의위원회(IC) 단계에서 결정을 기다리는 딜은 ${needsDecision.length}건입니다. `
+      : '현재 IC 단계에서 결정을 기다리는 딜은 없습니다. ') +
+    (overdue.length > 0
+      ? `기한이 지난 다음 액션이 ${overdue.length}건 있어 확인이 필요합니다.`
+      : '기한이 지난 다음 액션은 없습니다.');
+
+  const stat = (n, label) => `
+    <div class="report-stat">
+      <div class="report-stat-num">${n}</div>
+      <div class="report-stat-label">${label}</div>
+    </div>`;
+
+  return `
+    <div class="card mb-3 report-summary-card">
+      <div class="card-header"><i class="fas fa-chart-simple me-2"></i>요약</div>
+      <div class="card-body">
+        <div class="report-stat-row mb-3">
+          ${stat(newIntakes.length, '신규 접수')}
+          ${stat(stageChanges.length, '단계 변경')}
+          ${stat(decisions.length, '투자 결정')}
+          ${stat(needsDecision.length, '결정 대기(IC)')}
+          ${stat(overdue.length, '기한 초과')}
+        </div>
+        <p class="mb-0" style="line-height:1.7">${escapeHtml(narrative)}</p>
+      </div>
+    </div>`;
+}
+
 // ── 전체 렌더링 ────────────────────────────────────────────────
 
 function render(data) {
   const { newIntakes, stageChanges, decisions, needsDecision, overdue, dealById } = data;
 
   const html = [
-    sectionCard('fa-inbox', '이번 주 신규 접수', newIntakes.length,
+    summarySection(data),
+
+    sectionCard(1, 'fa-inbox', '이번 주 신규 접수', newIntakes.length,
       reportTable(['딜명', '자산군', '담당자', '인입일'],
         newIntakes.map(intakeRow), '이번 주 신규 접수된 딜이 없습니다.')),
 
-    sectionCard('fa-right-left', '이번 주 단계 변경', stageChanges.length,
+    sectionCard(2, 'fa-right-left', '이번 주 단계 변경', stageChanges.length,
       reportTable(['딜명', '변경된 단계', '변경일시', '변경자'],
         stageChanges.map(h => stageChangeRow(h, dealById)), '이번 주 단계가 바뀐 딜이 없습니다.')),
 
-    sectionCard('fa-gavel', '이번 주 결정 (투자확정·드랍)', decisions.length,
+    sectionCard(3, 'fa-gavel', '이번 주 결정 (투자확정·드랍)', decisions.length,
       reportTable(['딜명', '결정', '결정일시', '결정자'],
         decisions.map(h => decisionRow(h, dealById)), '이번 주 투자확정·드랍으로 결정된 딜이 없습니다.')),
 
-    sectionCard('fa-triangle-exclamation', '결정 필요 (IC 단계)', needsDecision.length,
+    sectionCard(4, 'fa-triangle-exclamation', '결정 필요 (IC 단계)', needsDecision.length,
       reportTable(['딜명', '담당자', '인입일', '다음 액션'],
         needsDecision.map(needsDecisionRow), '투자심의위원회 단계에 있는 딜이 없습니다.'),
       '이번 주 집계가 아니라 지금 시점에 IC 단계에 있는 딜 전체입니다.'),
 
-    sectionCard('fa-clock', '기한 초과 다음 액션', overdue.length,
+    sectionCard(5, 'fa-clock', '기한 초과 다음 액션', overdue.length,
       reportTable(['딜명', '다음 액션', '담당자', '기한'],
         overdue.map(overdueRow), '기한이 지난 다음 액션이 없습니다.'),
       '이번 주 집계가 아니라 지금 시점에 기한이 지난 딜 전체입니다.'),

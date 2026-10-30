@@ -663,6 +663,45 @@ body {
   .card { break-inside: avoid; border: 1px solid #ccc !important; box-shadow: none !important; }
 }
 
+/* 주간 보고 레터헤드(표지) — 화면에서는 숨고 인쇄/PDF에만 보입니다(.print-only). */
+.report-letterhead {
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 14px;
+}
+.report-letterhead-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.report-letterhead-top img { height: 28px; }
+.report-letterhead-top span { font-size: 12px; color: var(--text-muted); }
+.report-letterhead h2 { font-size: 22px; font-weight: 700; color: var(--navy); }
+.report-meta-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.report-meta-table th, .report-meta-table td {
+  border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+}
+.report-meta-table th {
+  background: #f8f9fc; font-weight: 600; width: 14%; white-space: nowrap;
+}
+.report-meta-table td { width: 36%; }
+
+/* 요약 카드 — 화면·인쇄 둘 다 보입니다(위 보고 섹션들과 달리 print-only가 아님). */
+.report-summary-card .card-header { background: var(--navy); color: #fff; }
+.report-stat-row {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.report-stat {
+  flex: 1 1 110px;
+  background: #f8f9fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.report-stat-num { font-size: 22px; font-weight: 700; color: var(--navy); }
+.report-stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
 /* 참고 이미지의 매끈한 5단 깔때기 */
 .funnel-surface {
   display: block;
